@@ -14,6 +14,10 @@ test("parcours complet : créer, ajouter un repas, le compléter, le noter et le
   await page.fill("#add-title", "Tartiflette");
   await page.click("#add-form button[type=submit]");
   await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+
+  // Replié par défaut : il faut le déplier pour accéder au statut, à la
+  // source et au commentaire.
+  await page.click('[data-action="toggle"]');
   await expect(page.locator('.status-pill[data-status="idee"]')).toHaveAttribute("aria-pressed", "true");
 
   // Source : un lien détecté est rendu cliquable

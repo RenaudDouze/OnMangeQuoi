@@ -28,6 +28,7 @@ test("deux appareils sur la même liste se synchronisent en temps réel", async 
   // Un changement de statut fait depuis un appareil (archivage, confirmé via
   // la modale de note/commentaire) se reflète aussi chez l'autre : le repas
   // disparaît de sa liste active.
+  await page2.click('[data-action="toggle"]');
   await page2.click('.status-pill[data-status="fait"]');
   await page2.click("#mark-done-confirm");
   await expect(page1.locator(".meal-card")).toHaveCount(0, { timeout: 5000 });
