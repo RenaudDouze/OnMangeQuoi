@@ -107,7 +107,7 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
 
 function mealCardHtml(meal: Meal, archived: boolean): string {
   const statusArea = archived
-    ? `<span class="status-badge">Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
+    ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
     : statusPickerHtml(meal.status);
 
   const actions = archived
