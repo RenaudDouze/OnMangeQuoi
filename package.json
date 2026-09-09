@@ -13,12 +13,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {},
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.54.4",
     "@cloudflare/workers-types": "^5.20260905.1",
+    "@playwright/test": "^1.63.0",
     "@vitest/coverage-v8": "^5.0.0",
     "oxlint": "^1.81.0",
     "typescript": "^7.0.2",

@@ -60,6 +60,37 @@ Ceci build le front (`vite build`) puis déploie avec `wrangler deploy`. Il
 faut être connecté à un compte Cloudflare (`npx wrangler login` la première
 fois).
 
+En CI, `.github/workflows/deploy.yml` fait ce déploiement automatiquement à
+chaque `CI` réussie sur `main`. Il lui faut deux secrets du dépôt
+(Settings → Secrets and variables → Actions → Secrets) :
+
+- `CLOUDFLARE_API_TOKEN` — un token avec les permissions Workers Scripts:Edit
+  et Workers Routes:Edit (créable sur
+  [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)).
+- `CLOUDFLARE_ACCOUNT_ID` — visible dans l'URL du dashboard Cloudflare ou via
+  `npx wrangler whoami`.
+
+Une fois le premier déploiement fait (URL `*.workers.dev` connue, ou domaine
+personnalisé), renseigne aussi la variable de dépôt `DEPLOY_URL` (Settings →
+Secrets and variables → Actions → Variables) avec cette URL : elle sert à la
+fois à vérifier le déploiement Cloudflare et à indiquer au build GitHub
+Pages (ci-dessous) où trouver l'API.
+
+## Déployer sur GitHub Pages
+
+L'app est aussi accessible via une URL `github.io`, en plus de l'URL
+Cloudflare Workers : le client est alors servi par GitHub Pages mais parle
+toujours à l'unique Worker Cloudflare (API + WebSocket temps réel) via CORS,
+donc les deux URLs donnent accès aux mêmes listes partagées.
+
+C'est géré par `.github/workflows/pages.yml`, qui build le client avec
+`VITE_SYNC_WORKER_URL` pointant vers l'URL publique du Worker (variable de
+dépôt `vars.DEPLOY_URL`, voir ci-dessus) puis publie `dist/client` sur
+GitHub Pages. Il faut activer Pages une première fois dans Settings → Pages
+(Source : "GitHub Actions") ; sans `DEPLOY_URL` défini, le build reste
+possible mais l'app servie par Pages n'a pas de Worker à qui parler
+(créer/rejoindre une liste échouera).
+
 ## Structure du projet
 
 ```
@@ -67,20 +98,28 @@ worker/            Worker Cloudflare (routes API), Durable Object MealRoom,
                     et reducer.ts (logique pure, testée unitairement)
 shared/            Types partagés entre le Worker et le client
 src/                Application front (vue Accueil / vue Liste)
+e2e/                Tests fonctionnels Playwright (parcours principal, sync
+                    temps réel multi-appareils)
 wrangler.json       Configuration Cloudflare (Durable Object, assets SPA)
 ```
 
-## Qualité
+## Qualité et CI/CD
 
 ```bash
 npm run lint          # oxlint
 npm run typecheck
 npm run test:coverage # Vitest — logique pure (shared/, worker/reducer.ts)
+npm run test:e2e      # Playwright, contre `vite dev`
 ```
 
 `worker/mealRoom.ts` (la fine couche Durable Object : stockage, WebSocket)
 n'est volontairement pas couvert par les tests unitaires — toute sa logique
-métier vit dans `worker/reducer.ts`, entièrement testé.
+métier vit dans `worker/reducer.ts`, entièrement testée.
+
+`.github/workflows/` : `ci.yml` (lint, typecheck, tests + couverture, e2e,
+audit, build) puis, une fois la CI verte sur `main`, `deploy.yml`
+(déploiement Cloudflare, jamais sur un simple push direct) et `pages.yml`
+(publication GitHub Pages). Dependabot et CodeQL sont aussi configurés.
 
 ## Modèle de données
 
