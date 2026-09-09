@@ -207,6 +207,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <button type="button" class="icon-btn" id="btn-home" aria-label="Retour à l'accueil">${icons.back}</button>
         <h1 id="list-title" tabindex="0">${escapeHtml(state.name)}</h1>
         <span class="conn-dot" id="conn-dot" title="${connected ? "Synchronisé" : "Connexion…"}"></span>
+        <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
         <button type="button" class="icon-btn" id="btn-share" aria-label="Partager">${icons.share}</button>
       </header>
       <div class="share-panel" id="share-panel" hidden>
@@ -220,8 +221,6 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <button type="button" class="tab-btn" data-tab="active" aria-pressed="true">Repas</button>
         <button type="button" class="tab-btn" data-tab="archive" aria-pressed="false">${icons.history} Historique</button>
       </nav>
-
-      <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
 
       <section class="card add-meal-card" id="add-meal-card">
         <form id="add-form" class="row">

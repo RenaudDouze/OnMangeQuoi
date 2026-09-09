@@ -524,6 +524,12 @@ button:focus-visible {
   opacity: 0.8;
 }
 
+.list-header .btn-link {
+  align-self: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .status-badge {
   font-size: 0.82rem;
   color: var(--text-muted);
