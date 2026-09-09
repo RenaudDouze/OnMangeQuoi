@@ -5,12 +5,12 @@ export type MealStatus = "idee" | "validee" | "commandee" | "rangee" | "non_comp
 export const MEAL_STATUSES: MealStatus[] = ["idee", "validee", "commandee", "rangee", "non_complet", "fait"];
 
 export const MEAL_STATUS_LABELS: Record<MealStatus, string> = {
-  idee: "Idée",
-  validee: "Validée",
-  commandee: "Commandée",
-  rangee: "Rangée",
-  non_complet: "Non complet",
-  fait: "Fait",
+  idee: "💡 Idée",
+  validee: "✅ Validée",
+  commandee: "🛒 Commandée",
+  rangee: "🧺 Rangée",
+  non_complet: "⚠️ Non complet",
+  fait: "🎉 Fait",
 };
 
 /** Note laissée après avoir mangé le repas, de la moins à la plus positive. */
@@ -19,11 +19,11 @@ export type MealNote = "plus_jamais" | "mouais" | "remplacer" | "de_temps_en_tem
 export const MEAL_NOTES: MealNote[] = ["plus_jamais", "mouais", "remplacer", "de_temps_en_temps", "quand_tu_veux"];
 
 export const MEAL_NOTE_LABELS: Record<MealNote, string> = {
-  plus_jamais: "Plus jamais",
-  mouais: "Mouais, ça change mais bon",
-  remplacer: "En remplaçant ça par ça peut-être ?",
-  de_temps_en_temps: "De temps en temps oui",
-  quand_tu_veux: "Quand tu veux où tu veux",
+  plus_jamais: "👎 Plus jamais",
+  mouais: "😐 Mouais, ça change mais bon",
+  remplacer: "🔄 En remplaçant ça par ça peut-être ?",
+  de_temps_en_temps: "🙂 De temps en temps oui",
+  quand_tu_veux: "😍 Quand tu veux où tu veux",
 };
 
 export interface Meal {
