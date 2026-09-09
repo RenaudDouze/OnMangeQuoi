@@ -35,6 +35,25 @@ test("supprimer un repas demande un second clic au même endroit", async ({ page
   await expect(page.locator(".empty-message")).toBeVisible();
 });
 
+test("un nouveau repas apparaît en tête de la liste active", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+
+  await page.fill("#add-title", "Curry de légumes");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText(["Curry de légumes", "Tartiflette"]);
+
+  await page.fill("#add-title", "Soupe de légumes");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText(["Soupe de légumes", "Curry de légumes", "Tartiflette"]);
+});
+
 test("le titre de la liste est modifiable en ligne, et persiste après rechargement", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");

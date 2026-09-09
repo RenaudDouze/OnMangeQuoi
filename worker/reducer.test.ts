@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyMessage, nextOrder } from "./reducer";
+import { applyMessage, nextOrder, prevOrder } from "./reducer";
 import type { ListState } from "../shared/types";
 
 function makeState(overrides: Partial<ListState> = {}): ListState {
@@ -22,6 +22,15 @@ describe("nextOrder", () => {
   });
   it("vaut max(order) + 1 sinon", () => {
     expect(nextOrder([{ order: 0 }, { order: 5 }, { order: 2 }])).toBe(6);
+  });
+});
+
+describe("prevOrder", () => {
+  it("vaut 0 pour une liste vide", () => {
+    expect(prevOrder([])).toBe(0);
+  });
+  it("vaut min(order) - 1 sinon", () => {
+    expect(prevOrder([{ order: 0 }, { order: 5 }, { order: 2 }])).toBe(-1);
   });
 });
 
@@ -73,11 +82,11 @@ describe("applyMessage: addMeal", () => {
     expect(state.meals).toEqual([]);
   });
 
-  it("incrémente order pour chaque ajout", () => {
+  it("décrémente order pour chaque ajout, pour que le plus récent arrive en tête", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "A" }, NOW);
     applyMessage(state, { type: "addMeal", id: "m2", title: "B" }, NOW);
-    expect(state.meals.map((m) => m.order)).toEqual([0, 1]);
+    expect(state.meals.map((m) => m.order)).toEqual([0, -1]);
   });
 });
 
