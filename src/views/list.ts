@@ -34,14 +34,9 @@ function statusPickerHtml(selected: MealStatus): string {
   return `<div class="status-picker" role="group" aria-label="Statut">${pills}</div>`;
 }
 
-function noteOptionsHtml(selected: string | null): string {
-  const none = `<option value="" ${selected ? "" : "selected"}>Pas encore de note</option>`;
-  const options = MEAL_NOTES.map((n) => `<option value="${n}" ${n === selected ? "selected" : ""}>${MEAL_NOTE_LABELS[n]}</option>`).join("");
-  return none + options;
-}
-
 /** Choix de note plus visuel qu'un <select>, réservé à la modale "Fait" (voir
- * openMarkDoneModal) : une carte par note, cochée façon bouton radio. */
+ * openMarkDoneModal) : une carte par note, cochée façon bouton radio et
+ * colorée. La note ne se règle que là, jamais depuis la carte du repas. */
 function noteVisualPickerHtml(selected: Meal["note"]): string {
   const noneBtn = `<button type="button" class="note-option" data-note="" aria-pressed="${selected ? "false" : "true"}">Pas encore de note</button>`;
   const options = MEAL_NOTES.map(
@@ -124,10 +119,7 @@ function mealCardHtml(meal: Meal, archived: boolean): string {
     <li class="meal-card${archived ? " archived" : ""}" data-id="${meal.id}">
       <div class="meal-main">
         <h3 class="meal-title" data-action="edit-title" tabindex="0">${escapeHtml(meal.title)}</h3>
-        <div class="meal-controls">
-          <select class="meal-note" data-field="note" aria-label="Note">${noteOptionsHtml(meal.note)}</select>
-          ${actions}
-        </div>
+        <div class="meal-controls">${actions}</div>
       </div>
       ${statusArea}
       <div class="meal-details">
@@ -410,11 +402,6 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
           }
           conn.send({ type: "setMealStatus", id, status });
         });
-      });
-
-      card.querySelector<HTMLSelectElement>('[data-field="note"]')?.addEventListener("change", (e) => {
-        const value = (e.target as HTMLSelectElement).value;
-        conn.send({ type: "setMealNote", id, note: value ? (value as Meal["note"]) : null });
       });
 
       card.querySelector<HTMLTextAreaElement>('[data-field="comment"]')?.addEventListener("blur", (e) => {

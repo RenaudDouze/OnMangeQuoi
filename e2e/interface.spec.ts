@@ -84,8 +84,11 @@ test("annuler la modale « Fait » ne change ni le statut ni la note/commentaire
 
   await expect(page.locator(".modal")).toBeHidden();
   await expect(page.locator('.status-pill[data-status="idee"]')).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".meal-note")).toHaveValue("");
   await expect(page.locator('[data-field="comment"]')).toHaveValue("");
+
+  // Rouvrir la modale confirme qu'aucune note n'a été envoyée entre-temps.
+  await page.click('.status-pill[data-status="fait"]');
+  await expect(page.locator('#mark-done-note-picker [data-note=""]')).toHaveAttribute("aria-pressed", "true");
 });
 
 test("le panneau de partage affiche le code de la liste", async ({ page }) => {

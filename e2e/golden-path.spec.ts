@@ -44,22 +44,29 @@ test("parcours complet : créer, ajouter un repas, le compléter, le noter et le
   await expect(page.locator(".meal-card")).toHaveCount(0);
   await expect(page.locator(".list-toast")).toContainText("déplacé vers l'historique");
 
-  // Il apparaît dans l'historique, note et commentaire déjà renseignés
+  // Il apparaît dans l'historique, commentaire déjà renseigné (la note ne
+  // s'affiche nulle part sur la carte : elle ne se voit/modifie que via la
+  // modale "Fait")
   await page.click('.tab-btn[data-tab="archive"]');
   await expect(page.locator(".meal-card")).toHaveCount(1);
   await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
   await expect(page.locator(".status-badge")).toBeVisible();
-  await expect(page.locator(".meal-note")).toHaveValue("de_temps_en_temps");
+  await expect(page.locator(".meal-note")).toHaveCount(0);
   await expect(page.locator('[data-field="comment"]')).toHaveValue("Ça a l'air simple à faire. Un peu lourd mais bon.");
 
-  // Remise en liste : redevient actif avec le statut réinitialisé, note et commentaire conservés
+  // Remise en liste : redevient actif avec le statut réinitialisé, commentaire conservé
   await page.click('[data-action="restore"]');
   await expect(page.locator(".meal-card")).toHaveCount(0);
   await page.click('.tab-btn[data-tab="active"]');
   await expect(page.locator(".meal-card")).toHaveCount(1);
   await expect(page.locator('.status-pill[data-status="idee"]')).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".meal-note")).toHaveValue("de_temps_en_temps");
   await expect(page.locator('[data-field="comment"]')).toHaveValue("Ça a l'air simple à faire. Un peu lourd mais bon.");
+
+  // La note reste malgré tout mémorisée : en rouvrant la modale "Fait", elle
+  // est pré-sélectionnée.
+  await page.click('.status-pill[data-status="fait"]');
+  await expect(page.locator('#mark-done-note-picker [data-note="de_temps_en_temps"]')).toHaveAttribute("aria-pressed", "true");
+  await page.click("#mark-done-cancel");
 });
 
 test("un code inconnu affiche un message clair plutôt qu'un écran vide", async ({ page }) => {

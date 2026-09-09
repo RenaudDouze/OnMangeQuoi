@@ -432,12 +432,6 @@ button:focus-visible {
   flex-wrap: wrap;
 }
 
-.meal-controls select {
-  font-size: 0.85rem;
-  padding: 0.4em 0.5em;
-  max-width: 12rem;
-}
-
 .status-badge {
   font-size: 0.82rem;
   color: var(--text-muted);
@@ -678,4 +672,45 @@ button:focus-visible {
 .note-option[aria-pressed="true"]::before {
   border-color: var(--primary);
   background: var(--primary);
+}
+
+/* Une couleur par note, de la moins à la plus positive (même logique que
+   .status-pill) : plus visuel qu'un aplat unique, et la couleur donne un
+   repère de "ton" immédiat sans avoir à relire le libellé. */
+.note-option[data-note="plus_jamais"][aria-pressed="true"],
+.note-option[data-note="mouais"][aria-pressed="true"],
+.note-option[data-note="remplacer"][aria-pressed="true"],
+.note-option[data-note="de_temps_en_temps"][aria-pressed="true"],
+.note-option[data-note="quand_tu_veux"][aria-pressed="true"] {
+  color: #fff;
+  border-color: transparent;
+}
+
+.note-option[data-note="plus_jamais"][aria-pressed="true"]::before,
+.note-option[data-note="mouais"][aria-pressed="true"]::before,
+.note-option[data-note="remplacer"][aria-pressed="true"]::before,
+.note-option[data-note="de_temps_en_temps"][aria-pressed="true"]::before,
+.note-option[data-note="quand_tu_veux"][aria-pressed="true"]::before {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: #fff;
+}
+
+.note-option[data-note="plus_jamais"][aria-pressed="true"] {
+  background: var(--danger);
+}
+
+.note-option[data-note="mouais"][aria-pressed="true"] {
+  background: #c9822c;
+}
+
+.note-option[data-note="remplacer"][aria-pressed="true"] {
+  background: #7c5cbf;
+}
+
+.note-option[data-note="de_temps_en_temps"][aria-pressed="true"] {
+  background: #2b8f86;
+}
+
+.note-option[data-note="quand_tu_veux"][aria-pressed="true"] {
+  background: #2f9e52;
 }
