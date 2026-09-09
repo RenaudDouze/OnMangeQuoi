@@ -134,6 +134,42 @@ test("choisir une suggestion de l'historique reprend le repas archivé plutôt q
   await expect(page.locator(".empty-message")).toContainText("Aucun repas dans l'historique");
 });
 
+test("la recherche filtre l'historique par titre, et n'apparaît que sur cet onglet", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  async function addAndArchive(title: string) {
+    await page.fill("#add-title", title);
+    await page.click("#add-form button[type=submit]");
+    await expect(page.locator(".meal-title").last()).toHaveText(title);
+    await page.click(`.meal-card:has-text("${title}") .status-pill[data-status="fait"]`);
+    await page.click("#mark-done-confirm");
+  }
+
+  await addAndArchive("Tartiflette");
+  await addAndArchive("Tarte aux pommes");
+  await addAndArchive("Curry de légumes");
+
+  await expect(page.locator("#search-card")).toBeHidden();
+
+  await page.click('.tab-btn[data-tab="archive"]');
+  await expect(page.locator("#search-card")).toBeVisible();
+  await expect(page.locator(".meal-card")).toHaveCount(3);
+
+  await page.fill("#archive-search", "tart");
+  await expect(page.locator(".meal-card")).toHaveCount(2);
+  await expect(page.locator(".meal-title")).toHaveText(["Tarte aux pommes", "Tartiflette"]);
+
+  await page.fill("#archive-search", "introuvable");
+  await expect(page.locator(".meal-card")).toHaveCount(0);
+  await expect(page.locator(".empty-message")).toContainText("Aucun repas ne correspond à la recherche.");
+
+  await page.click('.tab-btn[data-tab="active"]');
+  await expect(page.locator("#search-card")).toBeHidden();
+});
+
 test("le panneau de partage affiche le code de la liste", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");

@@ -208,6 +208,10 @@ button:focus-visible {
   position: relative;
 }
 
+.search-card input {
+  width: 100%;
+}
+
 .add-suggestions {
   position: absolute;
   left: 1rem;

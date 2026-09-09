@@ -194,6 +194,10 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <ul class="add-suggestions" id="add-suggestions" aria-label="Repas déjà faits" hidden></ul>
       </section>
 
+      <section class="card search-card" id="search-card" hidden>
+        <input id="archive-search" type="search" placeholder="Rechercher dans l'historique…" autocomplete="off" />
+      </section>
+
       <ul class="meal-list" id="meal-list"></ul>
       <p class="empty-message" id="empty-message" hidden></p>
 
@@ -209,6 +213,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   let loadError = false;
   let shellMounted = false;
   let tab: "active" | "archive" = "active";
+  let archiveQuery = "";
   const conn = new ListConnection(code);
 
   function onStateUpdate(next: ListState) {
@@ -277,6 +282,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       root.innerHTML = layoutHtml(state, connected);
       wireHeader();
       wireAddForm();
+      wireSearch();
       wireTabs();
       shellMounted = true;
     } else {
@@ -338,8 +344,17 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         root.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
         const addCard = root.querySelector("#add-meal-card") as HTMLElement | null;
         if (addCard) addCard.hidden = tab !== "active";
+        const searchCard = root.querySelector("#search-card") as HTMLElement | null;
+        if (searchCard) searchCard.hidden = tab !== "archive";
         renderMeals();
       });
+    });
+  }
+
+  function wireSearch(): void {
+    root.querySelector("#archive-search")?.addEventListener("input", (e) => {
+      archiveQuery = (e.target as HTMLInputElement).value;
+      renderMeals();
     });
   }
 
@@ -428,13 +443,23 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     const emptyEl = root.querySelector("#empty-message") as HTMLElement | null;
     if (!listEl || !emptyEl) return;
 
-    const meals = tab === "active" ? [...state.meals].sort((a, b) => a.order - b.order) : state.archive;
+    const query = archiveQuery.trim().toLowerCase();
+    const meals =
+      tab === "active"
+        ? [...state.meals].sort((a, b) => a.order - b.order)
+        : query
+          ? state.archive.filter((m) => m.title.toLowerCase().includes(query))
+          : state.archive;
 
     if (meals.length === 0) {
       listEl.innerHTML = "";
       emptyEl.hidden = false;
       emptyEl.textContent =
-        tab === "active" ? "Aucun repas pour l'instant. Ajoute une idée ci-dessus !" : "Aucun repas dans l'historique pour le moment.";
+        tab === "active"
+          ? "Aucun repas pour l'instant. Ajoute une idée ci-dessus !"
+          : query
+            ? "Aucun repas ne correspond à la recherche."
+            : "Aucun repas dans l'historique pour le moment.";
     } else {
       emptyEl.hidden = true;
       listEl.innerHTML = meals.map((m) => mealCardHtml(m, tab === "archive")).join("");
