@@ -33,8 +33,7 @@ export interface Meal {
   note: MealNote | null;
   /** Source libre : lien ou simple texte (ex: nom d'un livre de cuisine). */
   source: string;
-  commentBefore: string;
-  commentAfter: string;
+  comment: string;
   order: number;
   createdAt: number;
   updatedAt: number;
@@ -58,7 +57,7 @@ export type ClientMessage =
   | { type: "sync" }
   | { type: "renameList"; name: string }
   | { type: "addMeal"; id: string; title: string }
-  | { type: "updateMeal"; id: string; title?: string; source?: string; commentBefore?: string; commentAfter?: string }
+  | { type: "updateMeal"; id: string; title?: string; source?: string; comment?: string }
   | { type: "setMealStatus"; id: string; status: MealStatus }
   | { type: "setMealNote"; id: string; note: MealNote | null }
   | { type: "deleteMeal"; id: string }

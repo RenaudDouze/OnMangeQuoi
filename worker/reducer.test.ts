@@ -58,8 +58,7 @@ describe("applyMessage: addMeal", () => {
         status: "idee",
         note: null,
         source: "",
-        commentBefore: "",
-        commentAfter: "",
+        comment: "",
         order: 0,
         createdAt: NOW,
         updatedAt: NOW,
@@ -83,7 +82,7 @@ describe("applyMessage: addMeal", () => {
 });
 
 describe("applyMessage: updateMeal", () => {
-  it("met à jour titre, source et commentaires d'un repas actif", () => {
+  it("met à jour titre, source et commentaire d'un repas actif", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
     applyMessage(
@@ -93,16 +92,14 @@ describe("applyMessage: updateMeal", () => {
         id: "m1",
         title: "Tartiflette maison",
         source: "https://example.com/recette",
-        commentBefore: "Ça a l'air simple",
-        commentAfter: "Un peu trop crémeux",
+        comment: "Ça a l'air simple, un peu trop crémeux au final",
       },
       NOW + 1,
     );
     const meal = state.meals[0];
     expect(meal.title).toBe("Tartiflette maison");
     expect(meal.source).toBe("https://example.com/recette");
-    expect(meal.commentBefore).toBe("Ça a l'air simple");
-    expect(meal.commentAfter).toBe("Un peu trop crémeux");
+    expect(meal.comment).toBe("Ça a l'air simple, un peu trop crémeux au final");
     expect(meal.updatedAt).toBe(NOW + 1);
   });
 
@@ -123,8 +120,7 @@ describe("applyMessage: updateMeal", () => {
           status: "fait",
           note: null,
           source: "",
-          commentBefore: "",
-          commentAfter: "",
+          comment: "",
           order: 0,
           createdAt: NOW,
           updatedAt: NOW,
@@ -132,8 +128,8 @@ describe("applyMessage: updateMeal", () => {
         },
       ],
     });
-    applyMessage(state, { type: "updateMeal", id: "m1", commentAfter: "Excellent" }, NOW + 1);
-    expect(state.archive[0].commentAfter).toBe("Excellent");
+    applyMessage(state, { type: "updateMeal", id: "m1", comment: "Excellent" }, NOW + 1);
+    expect(state.archive[0].comment).toBe("Excellent");
   });
 
   it("ignore un id inconnu", () => {

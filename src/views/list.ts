@@ -26,8 +26,12 @@ function sourceHtml(source: string): string {
   return escapeHtml(source);
 }
 
-function statusOptionsHtml(selected: MealStatus): string {
-  return MEAL_STATUSES.map((s) => `<option value="${s}" ${s === selected ? "selected" : ""}>${MEAL_STATUS_LABELS[s]}</option>`).join("");
+function statusPickerHtml(selected: MealStatus): string {
+  const pills = MEAL_STATUSES.map(
+    (s) =>
+      `<button type="button" class="status-pill" data-status="${s}" aria-pressed="${s === selected}">${MEAL_STATUS_LABELS[s]}</button>`,
+  ).join("");
+  return `<div class="status-picker" role="group" aria-label="Statut">${pills}</div>`;
 }
 
 function noteOptionsHtml(selected: string | null): string {
@@ -43,7 +47,7 @@ function formatDate(ts: number): string {
 function mealCardHtml(meal: Meal, archived: boolean): string {
   const statusArea = archived
     ? `<span class="status-badge">Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
-    : `<select class="meal-status" data-field="status" aria-label="Statut">${statusOptionsHtml(meal.status)}</select>`;
+    : statusPickerHtml(meal.status);
 
   const actions = archived
     ? `<button type="button" class="icon-btn" data-action="restore" aria-label="Remettre dans la liste" title="Remettre dans la liste">${icons.undo}</button>
@@ -55,23 +59,19 @@ function mealCardHtml(meal: Meal, archived: boolean): string {
       <div class="meal-main">
         <h3 class="meal-title" data-action="edit-title" tabindex="0">${escapeHtml(meal.title)}</h3>
         <div class="meal-controls">
-          ${statusArea}
           <select class="meal-note" data-field="note" aria-label="Note">${noteOptionsHtml(meal.note)}</select>
           ${actions}
         </div>
       </div>
+      ${statusArea}
       <div class="meal-details">
         <div class="meal-field">
           <span class="meal-field-label">Source</span>
           <div class="meal-source" data-action="edit-source" tabindex="0">${sourceHtml(meal.source)}</div>
         </div>
         <div class="meal-field">
-          <span class="meal-field-label">Commentaire avant</span>
-          <textarea class="meal-comment" data-field="commentBefore" placeholder="Avant de le faire…" rows="2">${escapeHtml(meal.commentBefore)}</textarea>
-        </div>
-        <div class="meal-field">
-          <span class="meal-field-label">Commentaire après</span>
-          <textarea class="meal-comment" data-field="commentAfter" placeholder="Une fois mangé…" rows="2">${escapeHtml(meal.commentAfter)}</textarea>
+          <span class="meal-field-label">Commentaire</span>
+          <textarea class="meal-comment" data-field="comment" placeholder="Une note sur ce repas…" rows="2">${escapeHtml(meal.comment)}</textarea>
         </div>
       </div>
     </li>`;
@@ -329,10 +329,13 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         });
       });
 
-      card.querySelector<HTMLSelectElement>('[data-field="status"]')?.addEventListener("change", (e) => {
-        const status = (e.target as HTMLSelectElement).value as MealStatus;
-        conn.send({ type: "setMealStatus", id, status });
-        if (status === "fait") showUndoToast("Repas déplacé vers l'historique.", () => conn.send({ type: "restoreMeal", id }));
+      card.querySelectorAll<HTMLButtonElement>(".status-pill").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const status = btn.dataset.status as MealStatus;
+          if (status === meal.status) return;
+          conn.send({ type: "setMealStatus", id, status });
+          if (status === "fait") showUndoToast("Repas déplacé vers l'historique.", () => conn.send({ type: "restoreMeal", id }));
+        });
       });
 
       card.querySelector<HTMLSelectElement>('[data-field="note"]')?.addEventListener("change", (e) => {
@@ -340,12 +343,8 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         conn.send({ type: "setMealNote", id, note: value ? (value as Meal["note"]) : null });
       });
 
-      card.querySelectorAll<HTMLTextAreaElement>(".meal-comment").forEach((textarea) => {
-        const field = textarea.dataset.field as "commentBefore" | "commentAfter";
-        textarea.addEventListener("blur", () => {
-          if (field === "commentBefore") conn.send({ type: "updateMeal", id, commentBefore: textarea.value });
-          else conn.send({ type: "updateMeal", id, commentAfter: textarea.value });
-        });
+      card.querySelector<HTMLTextAreaElement>('[data-field="comment"]')?.addEventListener("blur", (e) => {
+        conn.send({ type: "updateMeal", id, comment: (e.target as HTMLTextAreaElement).value });
       });
 
       const deleteBtn = card.querySelector<HTMLButtonElement>('[data-action="delete"]');

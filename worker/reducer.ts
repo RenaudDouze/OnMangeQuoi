@@ -33,8 +33,7 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
         status: "idee",
         note: null,
         source: "",
-        commentBefore: "",
-        commentAfter: "",
+        comment: "",
         order: nextOrder(state.meals),
         createdAt: now,
         updatedAt: now,
@@ -52,8 +51,7 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
         if (title) meal.title = title;
       }
       if (msg.source !== undefined) meal.source = msg.source;
-      if (msg.commentBefore !== undefined) meal.commentBefore = msg.commentBefore;
-      if (msg.commentAfter !== undefined) meal.commentAfter = msg.commentAfter;
+      if (msg.comment !== undefined) meal.comment = msg.comment;
       meal.updatedAt = now;
       return;
     }
