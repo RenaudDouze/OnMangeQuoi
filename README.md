@@ -24,6 +24,8 @@ de données externe).
 - **Commentaires avant / après** : deux champs de commentaire libres par
   repas.
 - **Thème clair/sombre/auto**.
+- **Installable (PWA)** : manifest + service worker, s'ajoute à l'écran
+  d'accueil et se relance instantanément (shell mis en cache).
 
 ## Confidentialité
 
@@ -37,7 +39,9 @@ personne qui obtient le code peut voir et modifier la liste.
   [Durable Objects](https://developers.cloudflare.com/durable-objects/)
   (une instance par liste, stockage + diffusion WebSocket).
 - [Vite](https://vite.dev/) + [`@cloudflare/vite-plugin`](https://developers.cloudflare.com/workers/vite-plugin/)
-  pour un dev loop unique (front + Worker tournent dans le même processus).
+  pour un dev loop unique (front + Worker tournent dans le même processus,
+  avec `workerd`) + [`vite-plugin-pwa`](https://vite-pwa-org.netlify.app/)
+  pour le manifest/service worker.
 - TypeScript, sans framework front (DOM direct) pour rester léger.
 
 ## Démarrer en local
