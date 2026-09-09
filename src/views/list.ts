@@ -191,6 +191,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
           <input id="add-title" type="text" placeholder="Nom du repas" maxlength="120" autocomplete="off" />
           <button type="submit" class="btn primary">${icons.plus} Ajouter</button>
         </form>
+        <ul class="add-suggestions" id="add-suggestions" aria-label="Repas déjà faits" hidden></ul>
       </section>
 
       <ul class="meal-list" id="meal-list"></ul>
@@ -343,13 +344,73 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   }
 
   function wireAddForm(): void {
+    const input = root.querySelector("#add-title") as HTMLInputElement;
+    const suggestionsEl = root.querySelector("#add-suggestions") as HTMLElement | null;
+
+    function hideSuggestions(): void {
+      if (!suggestionsEl) return;
+      suggestionsEl.hidden = true;
+      suggestionsEl.innerHTML = "";
+    }
+
+    // Suggère les repas de l'historique dont le titre correspond à la
+    // saisie : reprendre un repas déjà fait le remet en liste active avec sa
+    // note/son commentaire d'origine (comme "Remettre dans la liste"),
+    // plutôt que de créer un nouveau repas vierge du même nom.
+    function renderSuggestions(): void {
+      if (!suggestionsEl || !state) return;
+      const query = input.value.trim().toLowerCase();
+      if (!query) {
+        hideSuggestions();
+        return;
+      }
+      const seenTitles = new Set<string>();
+      const matches: Meal[] = [];
+      for (const meal of state.archive) {
+        const key = meal.title.toLowerCase();
+        if (!key.includes(query) || seenTitles.has(key)) continue;
+        seenTitles.add(key);
+        matches.push(meal);
+        if (matches.length >= 5) break;
+      }
+      if (matches.length === 0) {
+        hideSuggestions();
+        return;
+      }
+      suggestionsEl.innerHTML = matches
+        .map(
+          (m) =>
+            `<li><button type="button" class="add-suggestion" data-id="${m.id}">${icons.history} ${escapeHtml(m.title)}</button></li>`,
+        )
+        .join("");
+      suggestionsEl.hidden = false;
+      suggestionsEl.querySelectorAll<HTMLButtonElement>(".add-suggestion").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          conn.send({ type: "restoreMeal", id: btn.dataset.id! });
+          input.value = "";
+          hideSuggestions();
+          input.focus();
+        });
+      });
+    }
+
+    input.addEventListener("input", renderSuggestions);
+    input.addEventListener("focus", renderSuggestions);
+    input.addEventListener("blur", () => {
+      // Laisse le temps au clic sur une suggestion de se déclencher avant de la masquer.
+      setTimeout(hideSuggestions, 150);
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") hideSuggestions();
+    });
+
     root.querySelector("#add-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
-      const input = root.querySelector("#add-title") as HTMLInputElement;
       const title = input.value.trim();
       if (!title) return;
       conn.send({ type: "addMeal", id: uid(), title });
       input.value = "";
+      hideSuggestions();
       input.focus();
     });
   }
