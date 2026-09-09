@@ -9,8 +9,8 @@ de données externe).
 
 - **Partage en temps réel** : chaque liste vit dans un Durable Object
   identifié par un code à 6 caractères ; tous les appareils connectés sont
-  synchronisés instantanément via WebSocket. Pas de compte : le code (ou le
-  lien `/l/CODE`) est le seul contrôle d'accès.
+  synchronisés instantanément via WebSocket. Pas de compte : le code, le
+  lien `/l/CODE` ou son QR code sont les seuls moyens d'accès.
 - **Statuts de repas** : chaque repas suit un statut — Idée, Validée,
   Commandée, Rangée, Non complet, Fait.
 - **Historique** : passer un repas en "Fait" le fait disparaître de la liste
@@ -43,6 +43,8 @@ personne qui obtient le code peut voir et modifier la liste.
   avec `workerd`) + [`vite-plugin-pwa`](https://vite-pwa-org.netlify.app/)
   pour le manifest/service worker.
 - TypeScript, sans framework front (DOM direct) pour rester léger.
+- [`qrcode`](https://www.npmjs.com/package/qrcode) pour générer le QR code de
+  partage côté client.
 
 ## Démarrer en local
 

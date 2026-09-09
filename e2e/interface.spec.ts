@@ -263,4 +263,8 @@ test("le panneau de partage affiche le code de la liste", async ({ page }) => {
   const code = page.url().split("/l/")[1];
   await page.click("#btn-share");
   await expect(page.locator("#share-code")).toHaveText(code);
+
+  // Le QR code de partage s'affiche (rendu asynchrone).
+  await expect(page.locator("#qr-wrap svg")).toBeVisible();
+  await expect(page.locator("#qr-wrap path")).not.toHaveCount(0);
 });

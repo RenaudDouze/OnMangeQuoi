@@ -8,8 +8,16 @@ import { escapeHtml } from "../lib/dom";
 import { startEdit } from "../lib/editable";
 import { wireConfirmClick } from "../lib/confirmClick";
 import { icons } from "../lib/icons";
+import { appPath } from "../lib/basePath";
+import { renderQrSvg } from "../lib/qr";
 
 const URL_RE = /^(https?:\/\/|www\.)/i;
+
+/** Lien de partage absolu, y compris le sous-chemin de déploiement (ex:
+ * "/OnMangeQuoi/" sur GitHub Pages) — voir src/lib/basePath.ts. */
+function shareUrl(code: string): string {
+  return `${location.origin}${appPath(`/l/${code}`)}`;
+}
 
 function sourceHref(source: string): string | null {
   if (!URL_RE.test(source.trim())) return null;
@@ -203,6 +211,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
       </header>
       <div class="share-panel" id="share-panel" hidden>
         <p>Code : <strong id="share-code">${state.code}</strong></p>
+        <div class="qr-wrap" id="qr-wrap" aria-label="QR code de partage"></div>
         <button type="button" class="btn" id="copy-code">Copier le code</button>
         <button type="button" class="btn" id="copy-link">Copier le lien</button>
       </div>
@@ -355,8 +364,15 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (state) copyToClipboard(state.code, "Code copié.");
     });
     root.querySelector("#copy-link")?.addEventListener("click", () => {
-      if (state) copyToClipboard(`${location.origin}/l/${state.code}`, "Lien copié.");
+      if (state) copyToClipboard(shareUrl(state.code), "Lien copié.");
     });
+
+    if (state) {
+      const qrWrap = root.querySelector("#qr-wrap") as HTMLElement | null;
+      renderQrSvg(shareUrl(state.code)).then((svg) => {
+        if (qrWrap) qrWrap.innerHTML = svg;
+      });
+    }
 
     const titleEl = root.querySelector("#list-title") as HTMLElement | null;
     titleEl?.addEventListener("click", () => {
