@@ -91,6 +91,49 @@ test("annuler la modale « Fait » ne change ni le statut ni la note/commentaire
   await expect(page.locator('#mark-done-note-picker [data-note=""]')).toHaveAttribute("aria-pressed", "true");
 });
 
+test("choisir une suggestion de l'historique reprend le repas archivé plutôt que d'en créer un nouveau", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  // Un repas fait puis archivé, avec une note et un commentaire.
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+  await page.fill('[data-field="comment"]', "Recette de mamie");
+  await page.locator('[data-field="comment"]').blur();
+  // Un aller-retour serveur avant "fait" garantit que la modale s'ouvre sur
+  // un repas déjà à jour côté client (pas de mise à jour optimiste locale).
+  await page.click('.status-pill[data-status="validee"]');
+  await expect(page.locator('.status-pill[data-status="validee"]')).toHaveAttribute("aria-pressed", "true");
+
+  await page.click('.status-pill[data-status="fait"]');
+  await page.click('#mark-done-note-picker [data-note="quand_tu_veux"]');
+  await page.click("#mark-done-confirm");
+  await expect(page.locator(".meal-card")).toHaveCount(0);
+
+  // Taper un titre correspondant propose le repas archivé en suggestion.
+  await page.fill("#add-title", "tarti");
+  await expect(page.locator(".add-suggestion")).toHaveText("Tartiflette");
+
+  // Le choisir le remet en liste active avec sa note/son commentaire d'origine,
+  // au lieu de créer un second repas vierge du même nom.
+  await page.click(".add-suggestion");
+  await expect(page.locator("#add-title")).toHaveValue("");
+  await expect(page.locator(".meal-card")).toHaveCount(1);
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+  await expect(page.locator('.status-pill[data-status="idee"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-field="comment"]')).toHaveValue("Recette de mamie");
+
+  await page.click('.status-pill[data-status="fait"]');
+  await expect(page.locator('#mark-done-note-picker [data-note="quand_tu_veux"]')).toHaveAttribute("aria-pressed", "true");
+  await page.click("#mark-done-cancel");
+
+  await page.click('.tab-btn[data-tab="archive"]');
+  await expect(page.locator(".empty-message")).toContainText("Aucun repas dans l'historique");
+});
+
 test("le panneau de partage affiche le code de la liste", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");

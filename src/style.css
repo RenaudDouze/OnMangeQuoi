@@ -204,6 +204,46 @@ button:focus-visible {
   margin: 0.4rem 0 0;
 }
 
+.add-meal-card {
+  position: relative;
+}
+
+.add-suggestions {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  z-index: 5;
+  margin: 0.3rem 0 0;
+  padding: 0.3rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.add-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.add-suggestion:hover,
+.add-suggestion:focus-visible {
+  background: var(--checked-bg);
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
