@@ -26,6 +26,12 @@ function sourceHtml(source: string): string {
   return escapeHtml(source);
 }
 
+/** Les libellés partagés sont "<emoji> <texte>" (voir shared/types.ts) :
+ * n'en garder que l'emoji pour l'aperçu replié d'une carte. */
+function emojiOf(label: string): string {
+  return label.split(" ")[0];
+}
+
 function statusPickerHtml(selected: MealStatus): string {
   const pills = MEAL_STATUSES.map(
     (s) =>
@@ -156,10 +162,21 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string 
       </div>`
     : "";
 
+  // Aperçu replié : l'emoji du statut pour un repas en cours, celui de la
+  // note (si elle a été renseignée) pour un repas de l'historique.
+  const collapsedEmoji = expanded
+    ? ""
+    : archived
+      ? meal.note
+        ? `<span class="meal-collapsed-emoji" aria-hidden="true">${emojiOf(MEAL_NOTE_LABELS[meal.note])}</span>`
+        : ""
+      : `<span class="meal-collapsed-emoji" aria-hidden="true">${emojiOf(MEAL_STATUS_LABELS[meal.status])}</span>`;
+
   return `
     <li class="meal-card${archived ? " archived" : ""}${expanded ? " expanded" : ""}" data-id="${meal.id}">
       <div class="meal-main">
         <button type="button" class="icon-btn meal-toggle" data-action="toggle" aria-expanded="${expanded}" aria-label="${expanded ? "Réduire" : "Déplier"}">${icons.chevronDown}</button>
+        ${collapsedEmoji}
         <h3 class="meal-title" data-action="edit-title" tabindex="0">${escapeHtml(meal.title)}</h3>
         <div class="meal-controls">${actions}</div>
       </div>
