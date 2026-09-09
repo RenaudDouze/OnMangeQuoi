@@ -16,7 +16,6 @@
     "test:e2e": "playwright test",
     "cf-typegen": "wrangler types"
   },
-  "dependencies": {},
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.54.4",
     "@cloudflare/workers-types": "^5.20260905.1",
@@ -25,6 +24,7 @@
     "oxlint": "^1.81.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
+    "vite-plugin-pwa": "^1.3.0",
     "vitest": "^5.0.0",
     "wrangler": "^4.129.0"
   },
