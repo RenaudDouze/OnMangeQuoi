@@ -66,6 +66,28 @@ test("l'onglet Historique affiche un message quand il est vide", async ({ page }
   await expect(page.locator("#add-meal-card")).toBeHidden();
 });
 
+test("annuler la modale « Fait » ne change ni le statut ni la note/commentaire", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Curry de légumes");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Curry de légumes");
+
+  await page.click('.status-pill[data-status="fait"]');
+  await expect(page.locator(".modal")).toBeVisible();
+  await page.selectOption("#mark-done-note", "plus_jamais");
+  await page.fill("#mark-done-comment", "Texte jamais envoyé");
+  await page.click("#mark-done-cancel");
+
+  await expect(page.locator(".modal")).toBeHidden();
+  await expect(page.locator('.status-pill[data-status="idee"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".meal-note")).toHaveValue("");
+  await expect(page.locator('[data-field="comment"]')).toHaveValue("");
+});
+
 test("le panneau de partage affiche le code de la liste", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");

@@ -25,9 +25,11 @@ test("deux appareils sur la même liste se synchronisent en temps réel", async 
   await page1.keyboard.press("Enter");
   await expect(page2.locator("#list-title")).toHaveText("Repas renommés", { timeout: 5000 });
 
-  // Un changement de statut fait depuis un appareil (archivage) se reflète
-  // aussi chez l'autre : le repas disparaît de sa liste active.
+  // Un changement de statut fait depuis un appareil (archivage, confirmé via
+  // la modale de note/commentaire) se reflète aussi chez l'autre : le repas
+  // disparaît de sa liste active.
   await page2.click('.status-pill[data-status="fait"]');
+  await page2.click("#mark-done-confirm");
   await expect(page1.locator(".meal-card")).toHaveCount(0, { timeout: 5000 });
 
   await ctx1.close();

@@ -31,22 +31,25 @@ test("parcours complet : créer, ajouter un repas, le compléter, le noter et le
   await expect(page.locator('.status-pill[data-status="validee"]')).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator('.status-pill[data-status="idee"]')).toHaveAttribute("aria-pressed", "false");
 
-  // Passer en "Fait" fait disparaître le repas de la liste active
+  // Passer en "Fait" ouvre une modale proposant de renseigner la note et de
+  // compléter le commentaire, pré-rempli avec ce qui a déjà été écrit
   await page.click('.status-pill[data-status="fait"]');
+  await expect(page.locator(".modal")).toBeVisible();
+  await expect(page.locator("#mark-done-comment")).toHaveValue("Ça a l'air simple à faire");
+  await page.selectOption("#mark-done-note", "de_temps_en_temps");
+  await page.fill("#mark-done-comment", "Ça a l'air simple à faire. Un peu lourd mais bon.");
+  await page.click("#mark-done-confirm");
+
   await expect(page.locator(".meal-card")).toHaveCount(0);
   await expect(page.locator(".list-toast")).toContainText("déplacé vers l'historique");
 
-  // Il apparaît dans l'historique
+  // Il apparaît dans l'historique, note et commentaire déjà renseignés
   await page.click('.tab-btn[data-tab="archive"]');
   await expect(page.locator(".meal-card")).toHaveCount(1);
   await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
   await expect(page.locator(".status-badge")).toBeVisible();
-
-  // On peut y laisser une note et compléter le commentaire
-  await page.selectOption(".meal-note", "de_temps_en_temps");
-  await expect(page.locator('[data-field="comment"]')).toHaveValue("Ça a l'air simple à faire");
-  await page.fill('[data-field="comment"]', "Ça a l'air simple à faire. Un peu lourd mais bon.");
-  await page.locator('[data-field="comment"]').blur();
+  await expect(page.locator(".meal-note")).toHaveValue("de_temps_en_temps");
+  await expect(page.locator('[data-field="comment"]')).toHaveValue("Ça a l'air simple à faire. Un peu lourd mais bon.");
 
   // Remise en liste : redevient actif avec le statut réinitialisé, note et commentaire conservés
   await page.click('[data-action="restore"]');
