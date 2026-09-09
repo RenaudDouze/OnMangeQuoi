@@ -207,6 +207,53 @@ test("les repas sont repliés par défaut, s'ouvrent au clic, et « Tout déplie
   await expect(page.locator("#toggle-all-btn")).toHaveText("Tout déplier");
 });
 
+test("au format replié, affiche l'emoji du statut (en cours) ou de la note (historique)", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  // Repas actif : l'emoji du statut "Idée" (par défaut) est visible replié.
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+  await expect(page.locator(".meal-collapsed-emoji")).toHaveText("💡");
+
+  // Il suit le statut choisi.
+  await page.click('[data-action="toggle"]');
+  await page.click('.status-pill[data-status="validee"]');
+  await page.click('[data-action="toggle"]');
+  await expect(page.locator(".meal-collapsed-emoji")).toHaveText("✅");
+
+  // Passage en "Fait" avec une note : dans l'historique, replié, c'est
+  // l'emoji de la note qui s'affiche (plus celui du statut).
+  await page.click('[data-action="toggle"]');
+  await page.click('.status-pill[data-status="fait"]');
+  await page.click('#mark-done-note-picker [data-note="quand_tu_veux"]');
+  await page.click("#mark-done-confirm");
+
+  await page.click('.tab-btn[data-tab="archive"]');
+  await expect(page.locator(".meal-card")).toHaveCount(1);
+  // Toujours ouvert depuis l'étape précédente (l'état replié/déplié suit le
+  // repas d'un onglet à l'autre) : le replier pour vérifier l'aperçu.
+  await page.click('[data-action="toggle"]');
+  await expect(page.locator(".meal-card")).not.toHaveClass(/expanded/);
+  await expect(page.locator(".meal-collapsed-emoji")).toHaveText("😍");
+
+  // Un repas archivé sans note n'affiche aucun emoji replié (la note reste
+  // mémorisée après une remise en liste : il faut explicitement l'effacer).
+  await page.click('[data-action="restore"]');
+  await page.click('.tab-btn[data-tab="active"]');
+  await page.click('[data-action="toggle"]');
+  await page.click('.status-pill[data-status="fait"]');
+  await page.click('#mark-done-note-picker [data-note=""]');
+  await page.click("#mark-done-confirm");
+  await page.click('.tab-btn[data-tab="archive"]');
+  await page.click('[data-action="toggle"]');
+  await expect(page.locator(".meal-card")).not.toHaveClass(/expanded/);
+  await expect(page.locator(".meal-collapsed-emoji")).toHaveCount(0);
+});
+
 test("le panneau de partage affiche le code de la liste", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
