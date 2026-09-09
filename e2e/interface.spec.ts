@@ -78,7 +78,7 @@ test("annuler la modale « Fait » ne change ni le statut ni la note/commentaire
 
   await page.click('.status-pill[data-status="fait"]');
   await expect(page.locator(".modal")).toBeVisible();
-  await page.selectOption("#mark-done-note", "plus_jamais");
+  await page.click('#mark-done-note-picker [data-note="plus_jamais"]');
   await page.fill("#mark-done-comment", "Texte jamais envoyé");
   await page.click("#mark-done-cancel");
 

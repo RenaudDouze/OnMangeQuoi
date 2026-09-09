@@ -36,7 +36,8 @@ test("parcours complet : créer, ajouter un repas, le compléter, le noter et le
   await page.click('.status-pill[data-status="fait"]');
   await expect(page.locator(".modal")).toBeVisible();
   await expect(page.locator("#mark-done-comment")).toHaveValue("Ça a l'air simple à faire");
-  await page.selectOption("#mark-done-note", "de_temps_en_temps");
+  await page.click('#mark-done-note-picker [data-note="de_temps_en_temps"]');
+  await expect(page.locator('#mark-done-note-picker [data-note="de_temps_en_temps"]')).toHaveAttribute("aria-pressed", "true");
   await page.fill("#mark-done-comment", "Ça a l'air simple à faire. Un peu lourd mais bon.");
   await page.click("#mark-done-confirm");
 
