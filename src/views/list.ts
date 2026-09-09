@@ -49,10 +49,27 @@ function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** Format attendu par <input type="date"> (YYYY-MM-DD), en heure locale : ne
+ * pas passer par toISOString(), qui convertit en UTC et peut faire glisser
+ * la date affichée d'un jour selon le fuseau. */
+function toDateInputValue(ts: number): string {
+  const d = new Date(ts);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Inverse de toDateInputValue : midi (plutôt que minuit) pour rester sur le
+ * même jour local quel que soit le fuseau au moment de l'affichage. */
+function fromDateInputValue(value: string): number {
+  return new Date(`${value}T12:00:00`).getTime();
+}
+
 /** Ouvert au moment de passer un repas en "Fait" : c'est le moment naturel
  * pour noter comment c'était, plutôt qu'une étape séparée à ne pas oublier
  * une fois le repas déjà dans l'historique. */
-function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: string) => void): void {
+function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: string, doneAt: number) => void): void {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
@@ -60,6 +77,10 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
       <button type="button" class="icon-btn modal-close" aria-label="Fermer">${icons.close}</button>
       <h2 id="mark-done-title">Marquer « ${escapeHtml(meal.title)} » comme fait</h2>
       <p class="modal-hint">Le repas part dans l'historique. C'est le bon moment pour noter comment c'était.</p>
+      <label class="modal-field">
+        <span>Date</span>
+        <input type="date" id="mark-done-date" value="${toDateInputValue(Date.now())}" />
+      </label>
       <div class="modal-field">
         <span>Note</span>
         ${noteVisualPickerHtml(meal.note)}
@@ -98,8 +119,10 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
     const noteBtn = overlay.querySelector<HTMLButtonElement>('.note-option[aria-pressed="true"]');
     const note = noteBtn?.dataset.note || "";
     const comment = (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement).value;
+    const dateValue = (overlay.querySelector("#mark-done-date") as HTMLInputElement).value;
+    const doneAt = dateValue ? fromDateInputValue(dateValue) : Date.now();
     close();
-    onConfirm(note ? (note as Meal["note"]) : null, comment);
+    onConfirm(note ? (note as Meal["note"]) : null, comment, doneAt);
   });
 
   (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement)?.focus();
@@ -392,10 +415,10 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
           const status = btn.dataset.status as MealStatus;
           if (status === meal.status) return;
           if (status === "fait") {
-            openMarkDoneModal(meal, (note, comment) => {
+            openMarkDoneModal(meal, (note, comment, doneAt) => {
               conn.send({ type: "updateMeal", id, comment });
               conn.send({ type: "setMealNote", id, note });
-              conn.send({ type: "setMealStatus", id, status: "fait" });
+              conn.send({ type: "setMealStatus", id, status: "fait", doneAt });
               showUndoToast("Repas déplacé vers l'historique.", () => conn.send({ type: "restoreMeal", id }));
             });
             return;

@@ -39,6 +39,8 @@ test("parcours complet : créer, ajouter un repas, le compléter, le noter et le
   await page.click('#mark-done-note-picker [data-note="de_temps_en_temps"]');
   await expect(page.locator('#mark-done-note-picker [data-note="de_temps_en_temps"]')).toHaveAttribute("aria-pressed", "true");
   await page.fill("#mark-done-comment", "Ça a l'air simple à faire. Un peu lourd mais bon.");
+  // La date du "fait" est modifiable : utile pour noter un repas après coup.
+  await page.fill("#mark-done-date", "2024-01-15");
   await page.click("#mark-done-confirm");
 
   await expect(page.locator(".meal-card")).toHaveCount(0);
@@ -46,11 +48,11 @@ test("parcours complet : créer, ajouter un repas, le compléter, le noter et le
 
   // Il apparaît dans l'historique, commentaire déjà renseigné (la note ne
   // s'affiche nulle part sur la carte : elle ne se voit/modifie que via la
-  // modale "Fait")
+  // modale "Fait"), avec la date choisie dans la modale
   await page.click('.tab-btn[data-tab="archive"]');
   await expect(page.locator(".meal-card")).toHaveCount(1);
   await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
-  await expect(page.locator(".status-badge")).toBeVisible();
+  await expect(page.locator(".status-badge")).toContainText("15 janv. 2024");
   await expect(page.locator(".meal-note")).toHaveCount(0);
   await expect(page.locator('[data-field="comment"]')).toHaveValue("Ça a l'air simple à faire. Un peu lourd mais bon.");
 
