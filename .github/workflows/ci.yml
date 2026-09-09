@@ -66,6 +66,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Le dépôt apt Google Chrome, préinstallé sur l'image du runner, n'est
+      # jamais utilisé ici (on teste avec le Chromium embarqué par Playwright,
+      # jamais avec Chrome) : le retirer avant `apt-get update` évite les
+      # échecs de CI (Hash Sum mismatch) quand ce miroir est instable.
+      - run: sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - if: always()
