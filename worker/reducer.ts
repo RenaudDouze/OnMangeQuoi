@@ -8,6 +8,12 @@ export function nextOrder(list: { order: number }[]): number {
   return list.length === 0 ? 0 : Math.max(...list.map((x) => x.order)) + 1;
 }
 
+/** Inverse de nextOrder : un ordre plus petit que tous les autres, pour
+ * qu'un nouveau repas apparaisse en tête de liste plutôt qu'à la fin. */
+export function prevOrder(list: { order: number }[]): number {
+  return list.length === 0 ? 0 : Math.min(...list.map((x) => x.order)) - 1;
+}
+
 function findMeal(state: ListState, id: string): Meal | undefined {
   return state.meals.find((m) => m.id === id) ?? state.archive.find((m) => m.id === id);
 }
@@ -34,7 +40,7 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
         note: null,
         source: "",
         comment: "",
-        order: nextOrder(state.meals),
+        order: prevOrder(state.meals),
         createdAt: now,
         updatedAt: now,
         doneAt: null,
