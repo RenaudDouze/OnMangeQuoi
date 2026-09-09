@@ -75,6 +75,7 @@ test("annuler la modale « Fait » ne change ni le statut ni la note/commentaire
   await page.fill("#add-title", "Curry de légumes");
   await page.click("#add-form button[type=submit]");
   await expect(page.locator(".meal-title")).toHaveText("Curry de légumes");
+  await page.click('[data-action="toggle"]');
 
   await page.click('.status-pill[data-status="fait"]');
   await expect(page.locator(".modal")).toBeVisible();
@@ -101,6 +102,7 @@ test("choisir une suggestion de l'historique reprend le repas archivé plutôt q
   await page.fill("#add-title", "Tartiflette");
   await page.click("#add-form button[type=submit]");
   await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+  await page.click('[data-action="toggle"]');
   await page.fill('[data-field="comment"]', "Recette de mamie");
   await page.locator('[data-field="comment"]').blur();
   // Un aller-retour serveur avant "fait" garantit que la modale s'ouvre sur
@@ -144,6 +146,7 @@ test("la recherche filtre l'historique par titre, et n'apparaît que sur cet ong
     await page.fill("#add-title", title);
     await page.click("#add-form button[type=submit]");
     await expect(page.locator(".meal-title").last()).toHaveText(title);
+    await page.click(`.meal-card:has-text("${title}") [data-action="toggle"]`);
     await page.click(`.meal-card:has-text("${title}") .status-pill[data-status="fait"]`);
     await page.click("#mark-done-confirm");
   }
@@ -168,6 +171,40 @@ test("la recherche filtre l'historique par titre, et n'apparaît que sur cet ong
 
   await page.click('.tab-btn[data-tab="active"]');
   await expect(page.locator("#search-card")).toBeHidden();
+});
+
+test("les repas sont repliés par défaut, s'ouvrent au clic, et « Tout déplier » ouvre tout d'un coup", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+  await page.fill("#add-title", "Curry de légumes");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-card")).toHaveCount(2);
+
+  // Repliés par défaut : ni le statut ni la source/commentaire ne sont visibles.
+  await expect(page.locator(".meal-card.expanded")).toHaveCount(0);
+  await expect(page.locator(".status-pill")).toHaveCount(0);
+
+  // Ouvrir un repas au clic sur son chevron ne touche pas l'autre.
+  await page.click('.meal-card:has-text("Tartiflette") [data-action="toggle"]');
+  await expect(page.locator('.meal-card:has-text("Tartiflette")')).toHaveClass(/expanded/);
+  await expect(page.locator('.meal-card:has-text("Curry de légumes")')).not.toHaveClass(/expanded/);
+  await expect(page.locator("#toggle-all-btn")).toHaveText("Tout déplier");
+
+  // "Tout déplier" ouvre les repas encore repliés.
+  await page.click("#toggle-all-btn");
+  await expect(page.locator(".meal-card.expanded")).toHaveCount(2);
+  await expect(page.locator("#toggle-all-btn")).toHaveText("Tout replier");
+
+  // Un second clic replie tout.
+  await page.click("#toggle-all-btn");
+  await expect(page.locator(".meal-card.expanded")).toHaveCount(0);
+  await expect(page.locator("#toggle-all-btn")).toHaveText("Tout déplier");
 });
 
 test("le panneau de partage affiche le code de la liste", async ({ page }) => {

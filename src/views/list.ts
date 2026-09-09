@@ -128,7 +128,10 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
   (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement)?.focus();
 }
 
-function mealCardHtml(meal: Meal, archived: boolean): string {
+/** Replié par défaut (juste le titre) : le contenu (statut, source,
+ * commentaire) ne s'affiche qu'une fois déplié, au clic sur le chevron ou
+ * via "Tout déplier" — voir expandedIds dans mountListView. */
+function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string {
   const statusArea = archived
     ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
     : statusPickerHtml(meal.status);
@@ -138,12 +141,8 @@ function mealCardHtml(meal: Meal, archived: boolean): string {
        <button type="button" class="icon-btn danger-hover" data-action="delete-forever" aria-label="Supprimer définitivement">${icons.trash}</button>`
     : `<button type="button" class="icon-btn danger-hover" data-action="delete" aria-label="Supprimer">${icons.trash}</button>`;
 
-  return `
-    <li class="meal-card${archived ? " archived" : ""}" data-id="${meal.id}">
-      <div class="meal-main">
-        <h3 class="meal-title" data-action="edit-title" tabindex="0">${escapeHtml(meal.title)}</h3>
-        <div class="meal-controls">${actions}</div>
-      </div>
+  const details = expanded
+    ? `
       ${statusArea}
       <div class="meal-details">
         <div class="meal-field">
@@ -154,7 +153,17 @@ function mealCardHtml(meal: Meal, archived: boolean): string {
           <span class="meal-field-label">Commentaire</span>
           <textarea class="meal-comment" data-field="comment" placeholder="Une note sur ce repas…" rows="2">${escapeHtml(meal.comment)}</textarea>
         </div>
+      </div>`
+    : "";
+
+  return `
+    <li class="meal-card${archived ? " archived" : ""}${expanded ? " expanded" : ""}" data-id="${meal.id}">
+      <div class="meal-main">
+        <button type="button" class="icon-btn meal-toggle" data-action="toggle" aria-expanded="${expanded}" aria-label="${expanded ? "Réduire" : "Déplier"}">${icons.chevronDown}</button>
+        <h3 class="meal-title" data-action="edit-title" tabindex="0">${escapeHtml(meal.title)}</h3>
+        <div class="meal-controls">${actions}</div>
       </div>
+      ${details}
     </li>`;
 }
 
@@ -186,6 +195,8 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <button type="button" class="tab-btn" data-tab="archive" aria-pressed="false">${icons.history} Historique</button>
       </nav>
 
+      <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
+
       <section class="card add-meal-card" id="add-meal-card">
         <form id="add-form" class="row">
           <input id="add-title" type="text" placeholder="Nom du repas" maxlength="120" autocomplete="off" />
@@ -214,6 +225,11 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   let shellMounted = false;
   let tab: "active" | "archive" = "active";
   let archiveQuery = "";
+  // Repliés par défaut ; conserve l'état ouvert/fermé d'un repas d'un
+  // rendu à l'autre (renderMeals régénère tout le HTML à chaque mise à
+  // jour temps réel, y compris quand seul un autre appareil a modifié la
+  // liste).
+  const expandedIds = new Set<string>();
   const conn = new ListConnection(code);
 
   function onStateUpdate(next: ListState) {
@@ -284,6 +300,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       wireAddForm();
       wireSearch();
       wireTabs();
+      wireToolbar();
       shellMounted = true;
     } else {
       updateTitle();
@@ -354,6 +371,18 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   function wireSearch(): void {
     root.querySelector("#archive-search")?.addEventListener("input", (e) => {
       archiveQuery = (e.target as HTMLInputElement).value;
+      renderMeals();
+    });
+  }
+
+  function wireToolbar(): void {
+    root.querySelector("#toggle-all-btn")?.addEventListener("click", () => {
+      const meals = visibleMeals();
+      const allExpanded = meals.length > 0 && meals.every((m) => expandedIds.has(m.id));
+      for (const m of meals) {
+        if (allExpanded) expandedIds.delete(m.id);
+        else expandedIds.add(m.id);
+      }
       renderMeals();
     });
   }
@@ -437,19 +466,27 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     );
   }
 
+  /** Repas actuellement affichés (onglet + recherche), dans l'ordre affiché
+   * — partagé entre le rendu et "Tout déplier" pour qu'ils portent sur
+   * exactement les mêmes repas. */
+  function visibleMeals(): Meal[] {
+    if (!state) return [];
+    const query = archiveQuery.trim().toLowerCase();
+    return tab === "active"
+      ? [...state.meals].sort((a, b) => a.order - b.order)
+      : query
+        ? state.archive.filter((m) => m.title.toLowerCase().includes(query))
+        : state.archive;
+  }
+
   function renderMeals(): void {
     if (!state) return;
     const listEl = root.querySelector("#meal-list") as HTMLElement | null;
     const emptyEl = root.querySelector("#empty-message") as HTMLElement | null;
     if (!listEl || !emptyEl) return;
 
+    const meals = visibleMeals();
     const query = archiveQuery.trim().toLowerCase();
-    const meals =
-      tab === "active"
-        ? [...state.meals].sort((a, b) => a.order - b.order)
-        : query
-          ? state.archive.filter((m) => m.title.toLowerCase().includes(query))
-          : state.archive;
 
     if (meals.length === 0) {
       listEl.innerHTML = "";
@@ -462,9 +499,16 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
             : "Aucun repas dans l'historique pour le moment.";
     } else {
       emptyEl.hidden = true;
-      listEl.innerHTML = meals.map((m) => mealCardHtml(m, tab === "archive")).join("");
+      listEl.innerHTML = meals.map((m) => mealCardHtml(m, tab === "archive", expandedIds.has(m.id))).join("");
     }
     wireMealCards();
+
+    const toggleAllBtn = root.querySelector("#toggle-all-btn") as HTMLButtonElement | null;
+    if (toggleAllBtn) {
+      toggleAllBtn.hidden = meals.length === 0;
+      const allExpanded = meals.length > 0 && meals.every((m) => expandedIds.has(m.id));
+      toggleAllBtn.textContent = allExpanded ? "Tout replier" : "Tout déplier";
+    }
   }
 
   function wireMealCards(): void {
@@ -475,6 +519,12 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       const id = card.dataset.id!;
       const meal = (tab === "active" ? state!.meals : state!.archive).find((m) => m.id === id);
       if (!meal) return;
+
+      card.querySelector<HTMLButtonElement>('[data-action="toggle"]')?.addEventListener("click", () => {
+        if (expandedIds.has(id)) expandedIds.delete(id);
+        else expandedIds.add(id);
+        renderMeals();
+      });
 
       const titleEl = card.querySelector<HTMLElement>('[data-action="edit-title"]');
       titleEl?.addEventListener("click", () => {

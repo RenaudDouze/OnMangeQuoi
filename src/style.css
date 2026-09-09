@@ -476,6 +476,34 @@ button:focus-visible {
   flex-wrap: wrap;
 }
 
+.meal-toggle {
+  flex-shrink: 0;
+}
+
+.meal-toggle svg {
+  transition: transform 0.15s ease;
+}
+
+.meal-card.expanded .meal-toggle svg {
+  transform: rotate(180deg);
+}
+
+.btn-link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.2rem 0;
+  text-decoration: underline;
+}
+
+.btn-link:hover {
+  opacity: 0.8;
+}
+
 .status-badge {
   font-size: 0.82rem;
   color: var(--text-muted);
