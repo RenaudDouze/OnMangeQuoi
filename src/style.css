@@ -444,6 +444,57 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.status-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.status-pill {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 0.35em 0.8em;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.status-pill:hover {
+  background: var(--checked-bg);
+}
+
+.status-pill[aria-pressed="true"] {
+  color: #fff;
+  border-color: transparent;
+}
+
+.status-pill[data-status="idee"][aria-pressed="true"] {
+  background: #8d8177;
+}
+
+.status-pill[data-status="validee"][aria-pressed="true"] {
+  background: #3b6ea5;
+}
+
+.status-pill[data-status="commandee"][aria-pressed="true"] {
+  background: #7c5cbf;
+}
+
+.status-pill[data-status="rangee"][aria-pressed="true"] {
+  background: #2b8f86;
+}
+
+.status-pill[data-status="non_complet"][aria-pressed="true"] {
+  background: var(--danger);
+}
+
+.status-pill[data-status="fait"][aria-pressed="true"] {
+  background: #2f9e52;
+}
+
 .meal-details {
   display: flex;
   flex-direction: column;
