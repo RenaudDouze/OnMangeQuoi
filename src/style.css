@@ -570,3 +570,66 @@ button:focus-visible {
   cursor: pointer;
   white-space: nowrap;
 }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 12, 4, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 30;
+}
+
+.modal {
+  position: relative;
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 1.25rem;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  padding-right: 2rem;
+}
+
+.modal-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.modal-field select,
+.modal-field textarea {
+  font-weight: 400;
+  color: var(--text);
+}
+
+.stacked-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}

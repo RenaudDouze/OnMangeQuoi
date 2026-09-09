@@ -44,6 +44,55 @@ function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** Ouvert au moment de passer un repas en "Fait" : c'est le moment naturel
+ * pour noter comment c'était, plutôt qu'une étape séparée à ne pas oublier
+ * une fois le repas déjà dans l'historique. */
+function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: string) => void): void {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mark-done-title" tabindex="-1">
+      <button type="button" class="icon-btn modal-close" aria-label="Fermer">${icons.close}</button>
+      <h2 id="mark-done-title">Marquer « ${escapeHtml(meal.title)} » comme fait</h2>
+      <p class="modal-hint">Le repas part dans l'historique. C'est le bon moment pour noter comment c'était.</p>
+      <label class="modal-field">
+        <span>Note</span>
+        <select id="mark-done-note">${noteOptionsHtml(meal.note)}</select>
+      </label>
+      <label class="modal-field">
+        <span>Commentaire</span>
+        <textarea id="mark-done-comment" rows="3" placeholder="Une note sur ce repas…">${escapeHtml(meal.comment)}</textarea>
+      </label>
+      <div class="stacked-actions">
+        <button type="button" class="btn primary" id="mark-done-confirm">Marquer comme fait</button>
+        <button type="button" class="btn" id="mark-done-cancel">Annuler</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", onKeydown);
+  };
+  function onKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape") close();
+  }
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+  document.addEventListener("keydown", onKeydown);
+  overlay.querySelector(".modal-close")?.addEventListener("click", close);
+  overlay.querySelector("#mark-done-cancel")?.addEventListener("click", close);
+  overlay.querySelector("#mark-done-confirm")?.addEventListener("click", () => {
+    const note = (overlay.querySelector("#mark-done-note") as HTMLSelectElement).value;
+    const comment = (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement).value;
+    close();
+    onConfirm(note ? (note as Meal["note"]) : null, comment);
+  });
+
+  (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement)?.focus();
+}
+
 function mealCardHtml(meal: Meal, archived: boolean): string {
   const statusArea = archived
     ? `<span class="status-badge">Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
@@ -333,8 +382,16 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         btn.addEventListener("click", () => {
           const status = btn.dataset.status as MealStatus;
           if (status === meal.status) return;
+          if (status === "fait") {
+            openMarkDoneModal(meal, (note, comment) => {
+              conn.send({ type: "updateMeal", id, comment });
+              conn.send({ type: "setMealNote", id, note });
+              conn.send({ type: "setMealStatus", id, status: "fait" });
+              showUndoToast("Repas déplacé vers l'historique.", () => conn.send({ type: "restoreMeal", id }));
+            });
+            return;
+          }
           conn.send({ type: "setMealStatus", id, status });
-          if (status === "fait") showUndoToast("Repas déplacé vers l'historique.", () => conn.send({ type: "restoreMeal", id }));
         });
       });
 
