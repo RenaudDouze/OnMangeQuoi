@@ -58,7 +58,7 @@ export type ClientMessage =
   | { type: "renameList"; name: string }
   | { type: "addMeal"; id: string; title: string }
   | { type: "updateMeal"; id: string; title?: string; source?: string; comment?: string }
-  | { type: "setMealStatus"; id: string; status: MealStatus }
+  | { type: "setMealStatus"; id: string; status: MealStatus; doneAt?: number }
   | { type: "setMealNote"; id: string; note: MealNote | null }
   | { type: "deleteMeal"; id: string }
   | { type: "reorderMeals"; orderedIds: string[] }

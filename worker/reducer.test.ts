@@ -172,6 +172,15 @@ describe("applyMessage: setMealStatus", () => {
     expect(state.meals).toEqual([]);
     expect(state.archive).toEqual([]);
   });
+
+  it("un doneAt explicite (repas noté après coup) est utilisé à la place de 'now'", () => {
+    const state = makeState();
+    const chosenDate = NOW - 1000 * 60 * 60 * 24 * 3; // il y a 3 jours
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "setMealStatus", id: "m1", status: "fait", doneAt: chosenDate }, NOW + 1);
+    expect(state.archive[0].doneAt).toBe(chosenDate);
+    expect(state.archive[0].updatedAt).toBe(NOW + 1);
+  });
 });
 
 describe("applyMessage: setMealNote", () => {

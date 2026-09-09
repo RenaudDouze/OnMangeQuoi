@@ -64,8 +64,10 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       meal.updatedAt = now;
       if (msg.status === "fait") {
         // Disparaît de la liste active, part dans l'archive (voir
-        // "restoreMeal" pour le remettre en liste plus tard).
-        meal.doneAt = now;
+        // "restoreMeal" pour le remettre en liste plus tard). La date peut
+        // être choisie dans la modale (repas noté après coup) ; par défaut,
+        // maintenant.
+        meal.doneAt = msg.doneAt ?? now;
         state.meals.splice(idx, 1);
         state.archive.unshift(meal);
       }
