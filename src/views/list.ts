@@ -40,6 +40,16 @@ function noteOptionsHtml(selected: string | null): string {
   return none + options;
 }
 
+/** Choix de note plus visuel qu'un <select>, réservé à la modale "Fait" (voir
+ * openMarkDoneModal) : une carte par note, cochée façon bouton radio. */
+function noteVisualPickerHtml(selected: Meal["note"]): string {
+  const noneBtn = `<button type="button" class="note-option" data-note="" aria-pressed="${selected ? "false" : "true"}">Pas encore de note</button>`;
+  const options = MEAL_NOTES.map(
+    (n) => `<button type="button" class="note-option" data-note="${n}" aria-pressed="${n === selected}">${MEAL_NOTE_LABELS[n]}</button>`,
+  ).join("");
+  return `<div class="note-picker" id="mark-done-note-picker" role="group" aria-label="Note">${noneBtn}${options}</div>`;
+}
+
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 }
@@ -55,10 +65,10 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
       <button type="button" class="icon-btn modal-close" aria-label="Fermer">${icons.close}</button>
       <h2 id="mark-done-title">Marquer « ${escapeHtml(meal.title)} » comme fait</h2>
       <p class="modal-hint">Le repas part dans l'historique. C'est le bon moment pour noter comment c'était.</p>
-      <label class="modal-field">
+      <div class="modal-field">
         <span>Note</span>
-        <select id="mark-done-note">${noteOptionsHtml(meal.note)}</select>
-      </label>
+        ${noteVisualPickerHtml(meal.note)}
+      </div>
       <label class="modal-field">
         <span>Commentaire</span>
         <textarea id="mark-done-comment" rows="3" placeholder="Une note sur ce repas…">${escapeHtml(meal.comment)}</textarea>
@@ -83,8 +93,15 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
   document.addEventListener("keydown", onKeydown);
   overlay.querySelector(".modal-close")?.addEventListener("click", close);
   overlay.querySelector("#mark-done-cancel")?.addEventListener("click", close);
+  overlay.querySelectorAll<HTMLButtonElement>(".note-option").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      overlay.querySelectorAll(".note-option").forEach((b) => b.setAttribute("aria-pressed", "false"));
+      btn.setAttribute("aria-pressed", "true");
+    });
+  });
   overlay.querySelector("#mark-done-confirm")?.addEventListener("click", () => {
-    const note = (overlay.querySelector("#mark-done-note") as HTMLSelectElement).value;
+    const noteBtn = overlay.querySelector<HTMLButtonElement>('.note-option[aria-pressed="true"]');
+    const note = noteBtn?.dataset.note || "";
     const comment = (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement).value;
     close();
     onConfirm(note ? (note as Meal["note"]) : null, comment);
