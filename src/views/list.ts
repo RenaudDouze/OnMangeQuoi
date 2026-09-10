@@ -151,18 +151,31 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
   (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement)?.focus();
 }
 
+/** Position d'un repas dans la liste active, pour activer/désactiver les
+ * flèches monter/descendre à ses deux extrémités. Sans objet pour
+ * l'historique (jamais réordonné à la main). */
+interface MovePosition {
+  isFirst: boolean;
+  isLast: boolean;
+}
+
 /** Replié par défaut (juste le titre) : le contenu (statut, source,
  * commentaire) ne s'affiche qu'une fois déplié, au clic sur le chevron ou
  * via "Tout déplier" — voir expandedIds dans mountListView. */
-function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string {
+function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, move: MovePosition | null): string {
   const statusArea = archived
     ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
     : statusPickerHtml(meal.status);
 
+  const moveButtons = move
+    ? `<button type="button" class="icon-btn" data-action="move-up" aria-label="Monter dans la liste" title="Monter"${move.isFirst ? " disabled" : ""}>${icons.moveUp}</button>
+       <button type="button" class="icon-btn" data-action="move-down" aria-label="Descendre dans la liste" title="Descendre"${move.isLast ? " disabled" : ""}>${icons.moveDown}</button>`
+    : "";
+
   const actions = archived
     ? `<button type="button" class="icon-btn" data-action="restore" aria-label="Remettre dans la liste" title="Remettre dans la liste">${icons.undo}</button>
        <button type="button" class="icon-btn danger-hover" data-action="delete-forever" aria-label="Supprimer définitivement">${icons.trash}</button>`
-    : `<button type="button" class="icon-btn danger-hover" data-action="delete" aria-label="Supprimer">${icons.trash}</button>`;
+    : `${moveButtons}<button type="button" class="icon-btn danger-hover" data-action="delete" aria-label="Supprimer">${icons.trash}</button>`;
 
   const details = expanded
     ? `
@@ -577,14 +590,29 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (li.dataset.id) existingById.set(li.dataset.id, li);
     });
 
-    const cards = meals.map((meal) => {
+    const cards = meals.map((meal, index) => {
       const existing = meal.id === frozenId ? existingById.get(meal.id) : undefined;
       if (existing) return existing;
-      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expandedIds.has(meal.id)));
+      const move = tab === "active" ? { isFirst: index === 0, isLast: index === meals.length - 1 } : null;
+      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expandedIds.has(meal.id), move));
       wireMealCard(card, meal);
       return card;
     });
     listEl.replaceChildren(...cards);
+  }
+
+  /** Échange l'ordre du repas `id` avec son voisin immédiat (delta -1 ou +1)
+   * dans la liste active. Pas de mise à jour optimiste locale : l'affichage
+   * ne change qu'au retour de l'état via le serveur, comme le reste de
+   * l'app. */
+  function moveMeal(id: string, delta: -1 | 1): void {
+    if (!state) return;
+    const ordered = [...state.meals].sort((a, b) => a.order - b.order).map((m) => m.id);
+    const index = ordered.indexOf(id);
+    const targetIndex = index + delta;
+    if (index === -1 || targetIndex < 0 || targetIndex >= ordered.length) return;
+    [ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]];
+    conn.send({ type: "reorderMeals", orderedIds: ordered });
   }
 
   function elementFromHtml(html: string): HTMLLIElement {
@@ -600,6 +628,13 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (expandedIds.has(id)) expandedIds.delete(id);
       else expandedIds.add(id);
       renderMeals();
+    });
+
+    card.querySelector<HTMLButtonElement>('[data-action="move-up"]')?.addEventListener("click", () => {
+      moveMeal(id, -1);
+    });
+    card.querySelector<HTMLButtonElement>('[data-action="move-down"]')?.addEventListener("click", () => {
+      moveMeal(id, 1);
     });
 
     const titleEl = card.querySelector<HTMLElement>('[data-action="edit-title"]');

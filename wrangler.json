@@ -21,6 +21,11 @@
       "name": "CREATE_LIST_RATE_LIMITER",
       "namespace_id": "1001",
       "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "READ_LIST_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 60, "period": 60 }
     }
   ],
   "migrations": [
