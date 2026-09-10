@@ -1,5 +1,14 @@
 import type { ListState, Meal, MealStatus } from "../../shared/types";
-import { MEAL_STATUSES, MEAL_STATUS_LABELS, MEAL_NOTES, MEAL_NOTE_LABELS } from "../../shared/types";
+import {
+  MEAL_STATUSES,
+  MEAL_STATUS_LABELS,
+  MEAL_NOTES,
+  MEAL_NOTE_LABELS,
+  MAX_TITLE_LENGTH,
+  MAX_LIST_NAME_LENGTH,
+  MAX_SOURCE_LENGTH,
+  MAX_COMMENT_LENGTH,
+} from "../../shared/types";
 import { ListConnection } from "../lib/ws";
 import { fetchListState } from "../lib/http";
 import { cacheListState, getCachedListState, touchRecentList } from "../lib/storage";
@@ -101,7 +110,7 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
       </div>
       <label class="modal-field">
         <span>Commentaire</span>
-        <textarea id="mark-done-comment" rows="3" placeholder="Une note sur ce repas…">${escapeHtml(meal.comment)}</textarea>
+        <textarea id="mark-done-comment" rows="3" placeholder="Une note sur ce repas…" maxlength="${MAX_COMMENT_LENGTH}">${escapeHtml(meal.comment)}</textarea>
       </label>
       <div class="stacked-actions">
         <button type="button" class="btn primary" id="mark-done-confirm">Marquer comme fait</button>
@@ -165,7 +174,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string 
         </div>
         <div class="meal-field">
           <span class="meal-field-label">Commentaire</span>
-          <textarea class="meal-comment" data-field="comment" placeholder="Une note sur ce repas…" rows="2">${escapeHtml(meal.comment)}</textarea>
+          <textarea class="meal-comment" data-field="comment" placeholder="Une note sur ce repas…" rows="2" maxlength="${MAX_COMMENT_LENGTH}">${escapeHtml(meal.comment)}</textarea>
         </div>
       </div>`
     : "";
@@ -224,7 +233,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
 
       <section class="card add-meal-card" id="add-meal-card">
         <form id="add-form" class="row">
-          <input id="add-title" type="text" placeholder="Nom du repas" maxlength="120" autocomplete="off" />
+          <input id="add-title" type="text" placeholder="Nom du repas" maxlength="${MAX_TITLE_LENGTH}" autocomplete="off" />
           <button type="submit" class="btn primary">${icons.plus} Ajouter</button>
         </form>
         <ul class="add-suggestions" id="add-suggestions" aria-label="Repas déjà faits" hidden></ul>
@@ -378,6 +387,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (!state) return;
       startEdit(titleEl, {
         value: state.name,
+        maxLength: MAX_LIST_NAME_LENGTH,
         onCommit: (value) => {
           if (value && state) conn.send({ type: "renameList", name: value });
           else render();
@@ -564,6 +574,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       titleEl?.addEventListener("click", () => {
         startEdit(titleEl, {
           value: meal.title,
+          maxLength: MAX_TITLE_LENGTH,
           onCommit: (value) => {
             if (value) conn.send({ type: "updateMeal", id, title: value });
             else render();
@@ -576,6 +587,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         startEdit(sourceEl, {
           value: meal.source,
           placeholder: "Lien ou texte libre",
+          maxLength: MAX_SOURCE_LENGTH,
           onCommit: (value) => conn.send({ type: "updateMeal", id, source: value }),
         });
       });

@@ -3,6 +3,7 @@ import { getRecentLists, forgetRecentList, touchRecentList } from "../lib/storag
 import { escapeHtml } from "../lib/dom";
 import { icons } from "../lib/icons";
 import { cycleThemePreference, getThemePreference, themeLabel, type ThemePreference } from "../lib/theme";
+import { MAX_LIST_NAME_LENGTH } from "../../shared/types";
 
 const THEME_ICON: Record<ThemePreference, string> = { system: icons.themeAuto, light: icons.sun, dark: icons.moon };
 
@@ -50,7 +51,7 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
         <section class="card">
           <h2>Nouvelle liste de repas</h2>
           <form id="create-form" class="row">
-            <input id="create-name" type="text" placeholder="Nom de la liste (optionnel)" maxlength="60" />
+            <input id="create-name" type="text" placeholder="Nom de la liste (optionnel)" maxlength="${MAX_LIST_NAME_LENGTH}" />
             <button type="submit" class="btn primary">Créer</button>
           </form>
           <p class="add-form-hint">Les données ne sont ni chiffrées ni protégées : n'y mets rien de privé ou de sensible.</p>

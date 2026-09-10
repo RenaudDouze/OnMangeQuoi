@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { ListState, ClientMessage, ServerMessage } from "../shared/types";
+import { MAX_LIST_NAME_LENGTH } from "../shared/types";
 import { applyMessage } from "./reducer";
 
 interface Env {
@@ -40,7 +41,7 @@ export class MealRoom extends DurableObject<Env> {
         const now = Date.now();
         this.listState = {
           code: body.code,
-          name: (body.name || "On mange quoi ?").trim() || "On mange quoi ?",
+          name: (body.name || "On mange quoi ?").trim().slice(0, MAX_LIST_NAME_LENGTH) || "On mange quoi ?",
           meals: [],
           archive: [],
           createdAt: now,
@@ -51,7 +52,7 @@ export class MealRoom extends DurableObject<Env> {
       return Response.json(this.listState);
     }
 
-    if (!this.listState) return new Response("not found", { status: 404 });
+    if (!this.listState) return Response.json({ error: "not found" }, { status: 404 });
     return Response.json(this.listState);
   }
 

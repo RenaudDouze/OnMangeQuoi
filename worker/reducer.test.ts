@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { applyMessage, nextOrder, prevOrder } from "./reducer";
 import type { ListState } from "../shared/types";
+import { MAX_TITLE_LENGTH, MAX_LIST_NAME_LENGTH, MAX_SOURCE_LENGTH, MAX_COMMENT_LENGTH, MAX_MEALS_TOTAL } from "../shared/types";
 
 function makeState(overrides: Partial<ListState> = {}): ListState {
   return {
@@ -54,6 +55,12 @@ describe("applyMessage: renameList", () => {
     applyMessage(state, { type: "renameList", name: "   " }, NOW);
     expect(state.name).toBe("On mange quoi ?");
   });
+
+  it("tronque un nom trop long (personne n'est authentifié pour écrire dans une liste)", () => {
+    const state = makeState();
+    applyMessage(state, { type: "renameList", name: "x".repeat(MAX_LIST_NAME_LENGTH + 50) }, NOW);
+    expect(state.name).toBe("x".repeat(MAX_LIST_NAME_LENGTH));
+  });
 });
 
 describe("applyMessage: addMeal", () => {
@@ -87,6 +94,32 @@ describe("applyMessage: addMeal", () => {
     applyMessage(state, { type: "addMeal", id: "m1", title: "A" }, NOW);
     applyMessage(state, { type: "addMeal", id: "m2", title: "B" }, NOW);
     expect(state.meals.map((m) => m.order)).toEqual([0, -1]);
+  });
+
+  it("tronque un titre trop long", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "x".repeat(MAX_TITLE_LENGTH + 50) }, NOW);
+    expect(state.meals[0].title).toBe("x".repeat(MAX_TITLE_LENGTH));
+  });
+
+  it("ignore l'ajout au-delà de MAX_MEALS_TOTAL repas (actifs + archivés)", () => {
+    const state = makeState({
+      meals: Array.from({ length: MAX_MEALS_TOTAL }, (_, i) => ({
+        id: `existing-${i}`,
+        title: "Repas",
+        status: "idee" as const,
+        note: null,
+        source: "",
+        comment: "",
+        order: i,
+        createdAt: NOW,
+        updatedAt: NOW,
+        doneAt: null,
+      })),
+    });
+    applyMessage(state, { type: "addMeal", id: "trop", title: "Un de trop" }, NOW);
+    expect(state.meals).toHaveLength(MAX_MEALS_TOTAL);
+    expect(state.meals.some((m) => m.id === "trop")).toBe(false);
   });
 });
 
@@ -145,6 +178,26 @@ describe("applyMessage: updateMeal", () => {
     const state = makeState();
     applyMessage(state, { type: "updateMeal", id: "ghost", title: "X" }, NOW);
     expect(state.meals).toEqual([]);
+  });
+
+  it("tronque titre, source et commentaire trop longs", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(
+      state,
+      {
+        type: "updateMeal",
+        id: "m1",
+        title: "x".repeat(MAX_TITLE_LENGTH + 10),
+        source: "y".repeat(MAX_SOURCE_LENGTH + 10),
+        comment: "z".repeat(MAX_COMMENT_LENGTH + 10),
+      },
+      NOW + 1,
+    );
+    const meal = state.meals[0];
+    expect(meal.title).toBe("x".repeat(MAX_TITLE_LENGTH));
+    expect(meal.source).toBe("y".repeat(MAX_SOURCE_LENGTH));
+    expect(meal.comment).toBe("z".repeat(MAX_COMMENT_LENGTH));
   });
 });
 

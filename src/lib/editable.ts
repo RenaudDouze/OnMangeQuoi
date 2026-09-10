@@ -1,6 +1,7 @@
 export interface EditableOptions {
   value: string;
   placeholder?: string;
+  maxLength?: number;
   onCommit: (value: string) => void;
 }
 
@@ -13,6 +14,7 @@ export function startEdit(el: HTMLElement, opts: EditableOptions): void {
   input.className = "inline-edit";
   input.value = opts.value;
   if (opts.placeholder) input.placeholder = opts.placeholder;
+  if (opts.maxLength) input.maxLength = opts.maxLength;
   el.replaceChildren(input);
   input.focus();
   input.select();
