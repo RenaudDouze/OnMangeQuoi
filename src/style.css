@@ -514,6 +514,31 @@ button:focus-visible {
   flex-shrink: 0;
 }
 
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0.4em;
+  color: var(--text-muted);
+  cursor: grab;
+  /* Empêche le geste de défilement tactile de prendre le dessus pendant
+     qu'on glisse la poignée pour réordonner. */
+  touch-action: none;
+}
+
+.meal-card.sortable-chosen {
+  box-shadow: var(--shadow);
+}
+
+.meal-card.sortable-drag {
+  cursor: grabbing;
+}
+
+.meal-card.sortable-ghost {
+  opacity: 0.4;
+}
+
 .meal-collapsed-emoji {
   flex-shrink: 0;
   font-size: 1.05rem;

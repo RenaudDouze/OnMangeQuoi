@@ -54,7 +54,7 @@ test("un nouveau repas apparaît en tête de la liste active", async ({ page }) 
   await expect(page.locator(".meal-title")).toHaveText(["Soupe de légumes", "Curry de légumes", "Tartiflette"]);
 });
 
-test("les flèches monter/descendre réordonnent la liste active", async ({ page }) => {
+test("glisser une carte par sa poignée réordonne la liste active", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
   await page.waitForURL(/\/l\//);
@@ -68,16 +68,22 @@ test("les flèches monter/descendre réordonnent la liste active", async ({ page
   await page.click("#add-form button[type=submit]");
   await expect(page.locator(".meal-title")).toHaveText(["Soupe de légumes", "Curry de légumes", "Tartiflette"]);
 
-  // Rien au-delà des deux bouts de la liste : la flèche "monter" du premier
-  // et la flèche "descendre" du dernier sont désactivées.
-  await expect(page.locator(".meal-card", { hasText: "Soupe de légumes" }).locator('[data-action="move-up"]')).toBeDisabled();
-  await expect(page.locator(".meal-card", { hasText: "Tartiflette" }).locator('[data-action="move-down"]')).toBeDisabled();
+  // Glisse la première carte ("Soupe de légumes") au-delà de la deuxième :
+  // SortableJS (forceFallback: true, voir wireMealList) écoute les
+  // événements souris/tactile plutôt que le drag-and-drop HTML5 natif, donc
+  // une séquence mouse.down/move/up classique suffit à le déclencher.
+  const handle = page.locator(".meal-card").nth(0).locator(".drag-handle");
+  const target = page.locator(".meal-card").nth(1);
+  const handleBox = await handle.boundingBox();
+  const targetBox = await target.boundingBox();
+  if (!handleBox || !targetBox) throw new Error("Poignée ou carte cible introuvable");
 
-  await page.locator(".meal-card", { hasText: "Soupe de légumes" }).locator('[data-action="move-down"]').click();
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height + 5, { steps: 10 });
+  await page.mouse.up();
+
   await expect(page.locator(".meal-title")).toHaveText(["Curry de légumes", "Soupe de légumes", "Tartiflette"]);
-
-  await page.locator(".meal-card", { hasText: "Tartiflette" }).locator('[data-action="move-up"]').click();
-  await expect(page.locator(".meal-title")).toHaveText(["Curry de légumes", "Tartiflette", "Soupe de légumes"]);
 });
 
 test("le titre de la liste est modifiable en ligne, et persiste après rechargement", async ({ page }) => {
