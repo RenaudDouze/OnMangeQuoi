@@ -485,8 +485,11 @@ button:focus-visible {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: 0.3rem;
   flex-wrap: wrap;
+  /* La zone cliquable pour déplier/replier dépasse le seul bouton chevron
+     (voir wireMealCard) : indique que le reste de la ligne réagit aussi. */
+  cursor: pointer;
 }
 
 .meal-title {
@@ -506,12 +509,16 @@ button:focus-visible {
 .meal-controls {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.2rem;
   flex-wrap: wrap;
 }
 
 .meal-toggle {
   flex-shrink: 0;
+  /* Plus fin que les autres icon-btn : toute la ligne (voir .meal-main)
+     déplie/replie aussi, une imprécision ici n'a pas de conséquence (à
+     l'inverse de la poignée de glissé, dont la zone reste large). */
+  padding: 0.25em;
 }
 
 .drag-handle {
