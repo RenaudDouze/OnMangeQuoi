@@ -134,9 +134,11 @@ test("choisir une suggestion de l'historique reprend le repas archivé plutôt q
   await page.click("#mark-done-confirm");
   await expect(page.locator(".meal-card")).toHaveCount(0);
 
-  // Taper un titre correspondant propose le repas archivé en suggestion.
+  // Taper un titre correspondant propose le repas archivé en suggestion,
+  // avec sa note pour rappeler ce qu'on en avait pensé.
   await page.fill("#add-title", "tarti");
-  await expect(page.locator(".add-suggestion")).toHaveText("Tartiflette");
+  await expect(page.locator(".add-suggestion-title")).toContainText("Tartiflette");
+  await expect(page.locator(".add-suggestion-note")).toHaveText("😍 Quand tu veux où tu veux");
 
   // Le choisir le remet en liste active avec sa note/son commentaire d'origine,
   // au lieu de créer un second repas vierge du même nom.
