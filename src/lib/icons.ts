@@ -30,6 +30,9 @@ export const icons = {
     '<path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11 5"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07L13 19"/>',
   ),
   chevronDown: svg('<path d="m6 9 6 6 6-6"/>'),
+  image: svg(
+    '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+  ),
   // Poignée de glissé (6 points, façon "grip") : dessinée directement en
   // cercles plutôt qu'avec le gabarit `svg()` (fill: none, stroke) commun
   // aux autres icônes, qui ne convient pas à des points pleins.

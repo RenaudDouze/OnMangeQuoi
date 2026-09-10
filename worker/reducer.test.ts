@@ -79,6 +79,8 @@ describe("applyMessage: addMeal", () => {
         createdAt: NOW,
         updatedAt: NOW,
         doneAt: null,
+        hasImage: false,
+        imageVersion: 0,
       },
     ]);
   });
@@ -115,6 +117,8 @@ describe("applyMessage: addMeal", () => {
         createdAt: NOW,
         updatedAt: NOW,
         doneAt: null,
+        hasImage: false,
+        imageVersion: 0,
       })),
     });
     applyMessage(state, { type: "addMeal", id: "trop", title: "Un de trop" }, NOW);
@@ -167,6 +171,8 @@ describe("applyMessage: updateMeal", () => {
           createdAt: NOW,
           updatedAt: NOW,
           doneAt: NOW,
+          hasImage: false,
+          imageVersion: 0,
         },
       ],
     });
@@ -273,6 +279,43 @@ describe("applyMessage: setMealNote", () => {
     const state = makeState();
     applyMessage(state, { type: "setMealNote", id: "ghost", note: "mouais" }, NOW);
     expect(state.meals).toEqual([]);
+  });
+});
+
+describe("applyMessage: setMealImage", () => {
+  it("pose une image sur un repas actif et incrémente imageVersion", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 1);
+    expect(state.meals[0].hasImage).toBe(true);
+    expect(state.meals[0].imageVersion).toBe(1);
+    expect(state.meals[0].updatedAt).toBe(NOW + 1);
+  });
+
+  it("incrémente imageVersion à chaque remplacement, y compris à la suppression", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 1);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 2);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: false }, NOW + 3);
+    expect(state.meals[0].hasImage).toBe(false);
+    expect(state.meals[0].imageVersion).toBe(3);
+  });
+
+  it("peut poser une image sur un repas archivé", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "setMealStatus", id: "m1", status: "fait" }, NOW + 1);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 2);
+    expect(state.archive[0].hasImage).toBe(true);
+    expect(state.archive[0].imageVersion).toBe(1);
+  });
+
+  it("ignore un id inconnu", () => {
+    const state = makeState();
+    applyMessage(state, { type: "setMealImage", id: "ghost", hasImage: true }, NOW);
+    expect(state.meals).toEqual([]);
+    expect(state.archive).toEqual([]);
   });
 });
 
