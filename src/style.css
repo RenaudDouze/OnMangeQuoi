@@ -566,15 +566,14 @@ button:focus-visible {
 .meal-toggle {
   flex-shrink: 0;
   /* Plus fin que les autres icon-btn : toute la ligne (voir .meal-main)
-     déplie/replie aussi, une imprécision ici n'a pas de conséquence (à
-     l'inverse de la poignée de glissé, dont la zone reste large). */
+     déplie/replie aussi, une imprécision ici n'a pas de conséquence. */
   padding: 0.25em;
 }
 
-/* Toujours combinée à .icon-btn.meal-toggle (voir mealCardHtml) : ne
-   redéfinit que ce qui diffère d'un icon-btn ordinaire. */
+/* Toujours combinée à .icon-btn.meal-toggle (voir mealCardHtml) : hérite
+   donc de son padding (plus fin qu'un icon-btn ordinaire) et ne redéfinit
+   que ce qui diffère. */
 .drag-handle {
-  padding: 0.4em;
   color: var(--text-muted);
   cursor: grab;
   /* Empêche le geste de défilement tactile de prendre le dessus pendant
