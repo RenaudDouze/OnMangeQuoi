@@ -454,10 +454,12 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         return;
       }
       suggestionsEl.innerHTML = matches
-        .map(
-          (m) =>
-            `<li><button type="button" class="add-suggestion" data-id="${m.id}">${icons.history} ${escapeHtml(m.title)}</button></li>`,
-        )
+        .map((m) => {
+          const note = m.note
+            ? `<span class="add-suggestion-note">${escapeHtml(MEAL_NOTE_LABELS[m.note])}</span>`
+            : "";
+          return `<li><button type="button" class="add-suggestion" data-id="${m.id}"><span class="add-suggestion-title">${icons.history} ${escapeHtml(m.title)}</span>${note}</button></li>`;
+        })
         .join("");
       suggestionsEl.hidden = false;
       suggestionsEl.querySelectorAll<HTMLButtonElement>(".add-suggestion").forEach((btn) => {
