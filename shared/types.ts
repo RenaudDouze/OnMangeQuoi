@@ -10,6 +10,11 @@ export const MAX_SOURCE_LENGTH = 300;
 export const MAX_COMMENT_LENGTH = 2000;
 /** Total repas actifs + archivés : au-delà, les nouveaux ajouts sont ignorés. */
 export const MAX_MEALS_TOTAL = 1000;
+/** Taille max d'une image jointe à un repas (photo ou capture d'écran). */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** Types d'image acceptés en upload — voir worker/index.ts. Pas de SVG :
+ * un SVG peut embarquer du script, un risque inutile pour une simple photo. */
+export const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
 
 export type MealStatus = "idee" | "validee" | "commandee" | "rangee" | "non_complet" | "fait";
 
@@ -50,6 +55,12 @@ export interface Meal {
   updatedAt: number;
   /** Date du dernier passage au statut "fait" (archivage). null en liste active. */
   doneAt: number | null;
+  /** Image jointe (photo ou capture d'écran) — voir /api/lists/:code/meals/:id/image.
+   * imageVersion s'incrémente à chaque remplacement, pour que l'URL de
+   * l'image (qui l'inclut en query string) change et invalide le cache
+   * navigateur plutôt que de réafficher l'ancienne image. */
+  hasImage: boolean;
+  imageVersion: number;
 }
 
 export interface ListState {
@@ -71,6 +82,7 @@ export type ClientMessage =
   | { type: "updateMeal"; id: string; title?: string; source?: string; comment?: string }
   | { type: "setMealStatus"; id: string; status: MealStatus; doneAt?: number }
   | { type: "setMealNote"; id: string; note: MealNote | null }
+  | { type: "setMealImage"; id: string; hasImage: boolean }
   | { type: "deleteMeal"; id: string }
   | { type: "reorderMeals"; orderedIds: string[] }
   | { type: "restoreMeal"; id: string }

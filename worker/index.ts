@@ -1,4 +1,5 @@
 import { MealRoom } from "./mealRoom";
+import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES } from "../shared/types";
 
 export { MealRoom };
 
@@ -7,6 +8,8 @@ interface Env {
   ASSETS: Fetcher;
   CREATE_LIST_RATE_LIMITER: RateLimit;
   READ_LIST_RATE_LIMITER: RateLimit;
+  IMAGE_WRITE_RATE_LIMITER: RateLimit;
+  MEAL_IMAGES: R2Bucket;
 }
 
 // Ambiguous characters (0/O, 1/I) are excluded so codes are easy to read aloud
@@ -136,6 +139,90 @@ export default {
         const res = await stub.fetch("https://list.internal/state");
         return jsonPassthrough(res);
       }
+    }
+
+    const imageMatch = url.pathname.match(/^\/api\/lists\/([A-Za-z0-9]{4,10})\/meals\/([A-Za-z0-9_-]{1,64})\/image$/);
+    if (imageMatch) {
+      const code = normalizeCode(imageMatch[1]);
+      const mealId = imageMatch[2];
+      // Une seule image par repas : un nouvel upload écrase la précédente,
+      // pas besoin de suivre plusieurs clés ni de nettoyer les anciennes.
+      const key = `meals/${code}/${mealId}`;
+
+      if (request.method === "GET") {
+        // Pas de limiteur dédié à la lecture d'image : réutilise celui de la
+        // lecture de liste ci-dessus (même resource, même logique d'abus).
+        const ip = request.headers.get("CF-Connecting-IP");
+        if (ip) {
+          const { success } = await env.READ_LIST_RATE_LIMITER.limit({ key: ip });
+          if (!success) {
+            return jsonError("Trop de tentatives, réessaie dans une minute.", 429);
+          }
+        }
+
+        const object = await env.MEAL_IMAGES.get(key);
+        if (!object) return new Response("Not found", { status: 404, headers: CORS_HEADERS });
+        return new Response(object.body, {
+          headers: {
+            "content-type": object.httpMetadata?.contentType ?? "application/octet-stream",
+            // L'URL change de version à chaque remplacement (voir
+            // imageVersion) : un cache long est donc sans risque de servir
+            // une image périmée.
+            "cache-control": "public, max-age=31536000, immutable",
+            // Empêche le navigateur de réinterpréter le fichier au-delà du
+            // content-type déclaré (déjà validé à l'upload, voir plus bas).
+            "x-content-type-options": "nosniff",
+            ...CORS_HEADERS,
+          },
+        });
+      }
+
+      const ip = request.headers.get("CF-Connecting-IP");
+      if (ip) {
+        const { success } = await env.IMAGE_WRITE_RATE_LIMITER.limit({ key: ip });
+        if (!success) {
+          return jsonError("Trop de tentatives, réessaie dans une minute.", 429);
+        }
+      }
+
+      const stub = env.MEAL_ROOM.get(env.MEAL_ROOM.idFromName(code));
+
+      if (request.method === "PUT") {
+        const contentType = request.headers.get("content-type") ?? "";
+        if (!(ALLOWED_IMAGE_TYPES as readonly string[]).includes(contentType)) {
+          return jsonError("Format d'image non supporté.", 415);
+        }
+        // Vérifie d'abord l'en-tête (rejet rapide sans lire le corps), puis
+        // la taille réelle une fois lue : l'en-tête n'est qu'une déclaration
+        // du client, pas une garantie.
+        const declaredLength = Number(request.headers.get("content-length") ?? "0");
+        if (declaredLength > MAX_IMAGE_BYTES) {
+          return jsonError("Image trop volumineuse (5 Mo max).", 413);
+        }
+        const bytes = await request.arrayBuffer();
+        if (bytes.byteLength > MAX_IMAGE_BYTES) {
+          return jsonError("Image trop volumineuse (5 Mo max).", 413);
+        }
+        await env.MEAL_IMAGES.put(key, bytes, { httpMetadata: { contentType } });
+        const res = await stub.fetch("https://list.internal/apply", {
+          method: "POST",
+          body: JSON.stringify({ type: "setMealImage", id: mealId, hasImage: true }),
+          headers: { "content-type": "application/json" },
+        });
+        return jsonPassthrough(res);
+      }
+
+      if (request.method === "DELETE") {
+        await env.MEAL_IMAGES.delete(key);
+        const res = await stub.fetch("https://list.internal/apply", {
+          method: "POST",
+          body: JSON.stringify({ type: "setMealImage", id: mealId, hasImage: false }),
+          headers: { "content-type": "application/json" },
+        });
+        return jsonPassthrough(res);
+      }
+
+      return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
     }
 
     if (url.pathname.startsWith("/api/")) {

@@ -375,3 +375,53 @@ test("le panneau de partage affiche le code de la liste", async ({ page }) => {
   await expect(page.locator("#qr-wrap svg")).toBeVisible();
   await expect(page.locator("#qr-wrap path")).not.toHaveCount(0);
 });
+
+// PNG 1x1 transparent minimal, réutilisé pour l'upload et le collage.
+const TINY_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+test("ajouter une image (upload ou collage) l'affiche, et elle peut être supprimée", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+
+  await page.click('[data-action="toggle"]');
+  await expect(page.locator('[data-action="add-image"]')).toBeVisible();
+  await expect(page.locator(".meal-image-preview")).toHaveCount(0);
+
+  await page.setInputFiles('[data-action="image-input"]', {
+    name: "photo.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(TINY_PNG_BASE64, "base64"),
+  });
+
+  const img = page.locator(".meal-image-preview img");
+  await expect(img).toBeVisible();
+  await expect(img).toHaveAttribute("src", /\/image\?v=1$/);
+  await expect(page.locator('[data-action="add-image"]')).toHaveCount(0);
+
+  // Remplacer par collage (ex : capture d'écran) — événement paste réel
+  // plutôt qu'un second upload, pour exercer ce chemin spécifiquement.
+  await page.evaluate(async (base64) => {
+    const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+    const file = new File([blob], "pasted.png", { type: "image/png" });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.querySelector(".meal-card")!.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
+  }, TINY_PNG_BASE64);
+  await expect(img).toHaveAttribute("src", /\/image\?v=2$/);
+
+  // Supprimer demande un second clic au même endroit, comme les autres
+  // actions destructrices de la carte.
+  const removeBtn = page.locator('[data-action="remove-image"]');
+  await removeBtn.click();
+  await expect(removeBtn).toHaveClass(/confirm-armed/);
+  await removeBtn.click();
+  await expect(page.locator(".meal-image-preview")).toHaveCount(0);
+  await expect(page.locator('[data-action="add-image"]')).toBeVisible();
+});

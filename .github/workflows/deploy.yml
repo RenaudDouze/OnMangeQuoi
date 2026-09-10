@@ -41,6 +41,22 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+
+      - name: Créer le bucket R2 des images (idempotent)
+        # Contrairement aux Durable Objects/rate limiters déclarés dans
+        # wrangler.json, un bucket R2 doit exister avant le déploiement — il
+        # n'est pas créé automatiquement. Idempotent : ne fait rien s'il
+        # existe déjà, échoue sur toute autre erreur (ex: jeton sans les
+        # droits R2).
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -eo pipefail
+          if ! npx wrangler r2 bucket create onmangequoi-meal-images 2>&1 | tee /tmp/r2-create.log; then
+            grep -qi "already exists" /tmp/r2-create.log || { cat /tmp/r2-create.log; exit 1; }
+          fi
+
       - uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

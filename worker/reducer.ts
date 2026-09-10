@@ -49,6 +49,8 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
         createdAt: now,
         updatedAt: now,
         doneAt: null,
+        hasImage: false,
+        imageVersion: 0,
       };
       state.meals.push(meal);
       return;
@@ -89,6 +91,20 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       const meal = findMeal(state, msg.id);
       if (!meal) return;
       meal.note = msg.note;
+      meal.updatedAt = now;
+      return;
+    }
+
+    // Émis par le worker (pas directement par un client) une fois l'upload
+    // ou la suppression de l'image effectivement passée en R2 — voir
+    // worker/index.ts. imageVersion s'incrémente à chaque fois, y compris
+    // à la suppression, pour invalider un cache navigateur qui aurait
+    // gardé l'URL avec l'ancienne version.
+    case "setMealImage": {
+      const meal = findMeal(state, msg.id);
+      if (!meal) return;
+      meal.hasImage = msg.hasImage;
+      meal.imageVersion += 1;
       meal.updatedAt = now;
       return;
     }

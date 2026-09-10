@@ -21,6 +21,7 @@ export class MealRoom extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     await this.ensureLoaded();
+    const url = new URL(request.url);
 
     // Routing is based on method/headers rather than pathname: the worker
     // forwards the original client request unchanged for WebSocket upgrades
@@ -33,6 +34,23 @@ export class MealRoom extends DurableObject<Env> {
       this.ctx.acceptWebSocket(server);
       server.send(JSON.stringify({ type: "state", state: this.listState } satisfies ServerMessage));
       return new Response(null, { status: 101, webSocket: client });
+    }
+
+    // Chemin dédié (donc distingué par pathname, contrairement au reste de
+    // ce routage) : appelé par le worker après un upload/suppression
+    // d'image en R2, pour rejouer le même message que si un client l'avait
+    // envoyé en websocket — même validation, même persistance, même
+    // diffusion (voir applyAndBroadcast).
+    if (url.pathname === "/apply" && request.method === "POST") {
+      if (!this.listState) return Response.json({ error: "not found" }, { status: 404 });
+      let msg: ClientMessage;
+      try {
+        msg = await request.json<ClientMessage>();
+      } catch {
+        return Response.json({ error: "bad request" }, { status: 400 });
+      }
+      await this.applyAndBroadcast(msg);
+      return Response.json(this.listState);
     }
 
     if (request.method === "POST") {
@@ -68,9 +86,7 @@ export class MealRoom extends DurableObject<Env> {
     }
 
     try {
-      applyMessage(this.listState, msg);
-      await this.persist();
-      this.broadcast();
+      await this.applyAndBroadcast(msg);
     } catch (err) {
       ws.send(
         JSON.stringify({ type: "error", message: err instanceof Error ? err.message : "Erreur inconnue" } satisfies ServerMessage),
@@ -87,6 +103,12 @@ export class MealRoom extends DurableObject<Env> {
   }
 
   async webSocketError(_ws: WebSocket): Promise<void> {}
+
+  private async applyAndBroadcast(msg: ClientMessage): Promise<void> {
+    applyMessage(this.listState!, msg);
+    await this.persist();
+    this.broadcast();
+  }
 
   private broadcast(): void {
     const payload = JSON.stringify({ type: "state", state: this.listState! } satisfies ServerMessage);

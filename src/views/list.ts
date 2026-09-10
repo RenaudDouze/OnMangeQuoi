@@ -8,9 +8,11 @@ import {
   MAX_LIST_NAME_LENGTH,
   MAX_SOURCE_LENGTH,
   MAX_COMMENT_LENGTH,
+  MAX_IMAGE_BYTES,
+  ALLOWED_IMAGE_TYPES,
 } from "../../shared/types";
 import { ListConnection } from "../lib/ws";
-import { fetchListState } from "../lib/http";
+import { ApiError, fetchListState, uploadMealImage, deleteMealImage, mealImageUrl } from "../lib/http";
 import { cacheListState, getCachedListState, touchRecentList } from "../lib/storage";
 import { uid } from "../lib/id";
 import { escapeHtml } from "../lib/dom";
@@ -149,7 +151,26 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
 /** Replié par défaut (juste le titre) : le contenu (statut, source,
  * commentaire) ne s'affiche qu'une fois déplié, au clic sur le chevron ou
  * via "Tout déplier" — voir expandedIds dans mountListView. */
-function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string {
+/** Photo ou capture d'écran jointe : bouton d'ajout si absente, sinon
+ * miniature + suppression. Uploadée via un input file (data-action="add-
+ * image") ou en collant depuis le presse-papiers (voir wireMealCard) —
+ * les deux passent par la même fonction d'envoi. */
+function mealImageFieldHtml(meal: Meal, code: string): string {
+  const content = meal.hasImage
+    ? `<div class="meal-image-preview">
+        <img src="${mealImageUrl(code, meal.id, meal.imageVersion)}" alt="Photo de « ${escapeHtml(meal.title)} »" loading="lazy" />
+        <button type="button" class="icon-btn danger-hover meal-image-remove" data-action="remove-image" aria-label="Supprimer l'image">${icons.trash}</button>
+      </div>`
+    : `<button type="button" class="btn meal-image-add" data-action="add-image">${icons.image} Ajouter une photo</button>`;
+  return `
+    <div class="meal-field">
+      <span class="meal-field-label">Photo</span>
+      ${content}
+      <input type="file" class="meal-image-input" data-action="image-input" accept="${ALLOWED_IMAGE_TYPES.join(",")}" hidden />
+    </div>`;
+}
+
+function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: string): string {
   const statusArea = archived
     ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
     : statusPickerHtml(meal.status);
@@ -182,6 +203,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string 
           <span class="meal-field-label">Commentaire</span>
           <textarea class="meal-comment" data-field="comment" placeholder="Une note sur ce repas…" rows="2" maxlength="${MAX_COMMENT_LENGTH}">${escapeHtml(meal.comment)}</textarea>
         </div>
+        ${mealImageFieldHtml(meal, code)}
         <div class="meal-details-actions">${deleteBtn}</div>
       </div>`
     : "";
@@ -628,7 +650,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     const cards = meals.map((meal) => {
       const existing = meal.id === frozenId ? existingById.get(meal.id) : undefined;
       if (existing) return existing;
-      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expandedIds.has(meal.id)));
+      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expandedIds.has(meal.id), code));
       wireMealCard(card, meal);
       return card;
     });
@@ -729,6 +751,72 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
 
     card.querySelector<HTMLButtonElement>('[data-action="restore"]')?.addEventListener("click", () => {
       conn.send({ type: "restoreMeal", id });
+    });
+
+    wireMealImage(card, id);
+  }
+
+  /** Ajout/remplacement d'une photo (input file ou collage — ex : capture
+   * d'écran) et suppression. Pas de mise à jour optimiste : comme pour le
+   * reste de l'app, l'aperçu ne se met à jour qu'au retour de l'état par le
+   * serveur (ici via la diffusion websocket déclenchée par l'upload, voir
+   * worker/index.ts), l'appel HTTP se contentant de confirmer/rejeter
+   * l'envoi lui-même. */
+  function wireMealImage(card: HTMLLIElement, id: string): void {
+    async function send(file: File | Blob): Promise<void> {
+      if (!(ALLOWED_IMAGE_TYPES as readonly string[]).includes(file.type)) {
+        showToast("Format d'image non supporté (PNG, JPEG, WebP ou GIF).");
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        showToast("Image trop volumineuse (5 Mo max).");
+        return;
+      }
+      try {
+        await uploadMealImage(code, id, file);
+      } catch (err) {
+        showToast(err instanceof ApiError ? err.message : "Erreur réseau, réessaie.");
+      }
+    }
+
+    const input = card.querySelector<HTMLInputElement>('[data-action="image-input"]');
+    card.querySelector<HTMLButtonElement>('[data-action="add-image"]')?.addEventListener("click", () => {
+      input?.click();
+    });
+    input?.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (file) send(file);
+      input.value = "";
+    });
+
+    const removeBtn = card.querySelector<HTMLButtonElement>('[data-action="remove-image"]');
+    if (removeBtn) {
+      wireConfirmClick(removeBtn, {
+        armedLabel: "Confirmer la suppression ?",
+        onConfirm: () => {
+          deleteMealImage(code, id).catch((err) => {
+            showToast(err instanceof ApiError ? err.message : "Erreur réseau, réessaie.");
+          });
+        },
+      });
+    }
+
+    // Coller une image (ex : capture d'écran) pendant que la carte est
+    // dépliée l'envoie directement, sans passer par le sélecteur de
+    // fichier — geste naturel juste après une capture d'écran.
+    card.addEventListener("paste", (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            send(file);
+          }
+          return;
+        }
+      }
     });
   }
 

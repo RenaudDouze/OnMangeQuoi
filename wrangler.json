@@ -26,6 +26,17 @@
       "name": "READ_LIST_RATE_LIMITER",
       "namespace_id": "1002",
       "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      "name": "IMAGE_WRITE_RATE_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEAL_IMAGES",
+      "bucket_name": "onmangequoi-meal-images"
     }
   ],
   "migrations": [
