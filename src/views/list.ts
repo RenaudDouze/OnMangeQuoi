@@ -19,6 +19,7 @@ import { wireConfirmClick } from "../lib/confirmClick";
 import { icons } from "../lib/icons";
 import { appPath } from "../lib/basePath";
 import { renderQrSvg } from "../lib/qr";
+import Sortable from "sortablejs";
 
 const URL_RE = /^(https?:\/\/|www\.)/i;
 
@@ -151,31 +152,22 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
   (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement)?.focus();
 }
 
-/** Position d'un repas dans la liste active, pour activer/désactiver les
- * flèches monter/descendre à ses deux extrémités. Sans objet pour
- * l'historique (jamais réordonné à la main). */
-interface MovePosition {
-  isFirst: boolean;
-  isLast: boolean;
-}
-
 /** Replié par défaut (juste le titre) : le contenu (statut, source,
  * commentaire) ne s'affiche qu'une fois déplié, au clic sur le chevron ou
  * via "Tout déplier" — voir expandedIds dans mountListView. */
-function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, move: MovePosition | null): string {
+function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string {
   const statusArea = archived
     ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
     : statusPickerHtml(meal.status);
 
-  const moveButtons = move
-    ? `<button type="button" class="icon-btn" data-action="move-up" aria-label="Monter dans la liste" title="Monter"${move.isFirst ? " disabled" : ""}>${icons.moveUp}</button>
-       <button type="button" class="icon-btn" data-action="move-down" aria-label="Descendre dans la liste" title="Descendre"${move.isLast ? " disabled" : ""}>${icons.moveDown}</button>`
-    : "";
+  // Poignée de glissé pour réordonner (voir wireMealList/SortableJS) :
+  // uniquement sur la liste active, jamais sur l'historique.
+  const dragHandle = archived ? "" : `<span class="drag-handle" aria-hidden="true" title="Glisser pour réordonner">${icons.grip}</span>`;
 
   const actions = archived
     ? `<button type="button" class="icon-btn" data-action="restore" aria-label="Remettre dans la liste" title="Remettre dans la liste">${icons.undo}</button>
        <button type="button" class="icon-btn danger-hover" data-action="delete-forever" aria-label="Supprimer définitivement">${icons.trash}</button>`
-    : `${moveButtons}<button type="button" class="icon-btn danger-hover" data-action="delete" aria-label="Supprimer">${icons.trash}</button>`;
+    : `<button type="button" class="icon-btn danger-hover" data-action="delete" aria-label="Supprimer">${icons.trash}</button>`;
 
   const details = expanded
     ? `
@@ -205,6 +197,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, move: Mo
   return `
     <li class="meal-card${archived ? " archived" : ""}${expanded ? " expanded" : ""}" data-id="${meal.id}">
       <div class="meal-main">
+        ${dragHandle}
         <button type="button" class="icon-btn meal-toggle" data-action="toggle" aria-expanded="${expanded}" aria-label="${expanded ? "Réduire" : "Déplier"}">${icons.chevronDown}</button>
         ${collapsedEmoji}
         <h3 class="meal-title" data-action="edit-title" tabindex="0">${escapeHtml(meal.title)}</h3>
@@ -272,6 +265,11 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   let shellMounted = false;
   let tab: "active" | "archive" = "active";
   let archiveQuery = "";
+  // Le temps d'un glissé (voir wireMealList) : évite qu'une mise à jour
+  // reçue en direct ne reconstruise la liste sous les doigts de la personne
+  // en train de réordonner. Le prochain envoi (celui du dépôt) redéclenche
+  // de toute façon un rendu complet une fois l'état renvoyé par le serveur.
+  let dragging = false;
   // Repliés par défaut ; conserve l'état ouvert/fermé d'un repas d'un
   // rendu à l'autre (renderMeals régénère tout le HTML à chaque mise à
   // jour temps réel, y compris quand seul un autre appareil a modifié la
@@ -348,6 +346,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       wireSearch();
       wireTabs();
       wireToolbar();
+      wireMealList();
       shellMounted = true;
     } else {
       updateTitle();
@@ -439,6 +438,35 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         else expandedIds.add(m.id);
       }
       renderMeals();
+    });
+  }
+
+  /** Réordonner la liste active à la main : glisser une carte par sa
+   * poignée (`.drag-handle`, absente sur l'historique — SortableJS n'a donc
+   * rien à saisir côté archive). Pas de mise à jour optimiste "posée" : le
+   * DOM reflète déjà le nouvel ordre pendant/après le glissé (SortableJS
+   * déplace les vrais nœuds), et le prochain état renvoyé par le serveur
+   * confirme (ou corrige) l'affichage, comme pour le reste de l'app. */
+  function wireMealList(): void {
+    const listEl = root.querySelector("#meal-list") as HTMLElement | null;
+    if (!listEl) return;
+    new Sortable(listEl, {
+      handle: ".drag-handle",
+      draggable: ".meal-card",
+      animation: 150,
+      // Gestion du glissé entièrement en JS (souris/tactile) plutôt que le
+      // drag-and-drop HTML5 natif : ce dernier ne fonctionne pas au tactile
+      // (l'usage principal de cette app, en PWA) et se comporte de façon
+      // moins cohérente d'un navigateur à l'autre.
+      forceFallback: true,
+      onStart: () => {
+        dragging = true;
+      },
+      onEnd: () => {
+        dragging = false;
+        const orderedIds = Array.from(listEl.querySelectorAll<HTMLLIElement>(".meal-card")).map((li) => li.dataset.id!);
+        conn.send({ type: "reorderMeals", orderedIds });
+      },
     });
   }
 
@@ -538,6 +566,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
 
   function renderMeals(): void {
     if (!state) return;
+    if (dragging) return;
     const listEl = root.querySelector("#meal-list") as HTMLElement | null;
     const emptyEl = root.querySelector("#empty-message") as HTMLElement | null;
     if (!listEl || !emptyEl) return;
@@ -590,29 +619,14 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (li.dataset.id) existingById.set(li.dataset.id, li);
     });
 
-    const cards = meals.map((meal, index) => {
+    const cards = meals.map((meal) => {
       const existing = meal.id === frozenId ? existingById.get(meal.id) : undefined;
       if (existing) return existing;
-      const move = tab === "active" ? { isFirst: index === 0, isLast: index === meals.length - 1 } : null;
-      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expandedIds.has(meal.id), move));
+      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expandedIds.has(meal.id)));
       wireMealCard(card, meal);
       return card;
     });
     listEl.replaceChildren(...cards);
-  }
-
-  /** Échange l'ordre du repas `id` avec son voisin immédiat (delta -1 ou +1)
-   * dans la liste active. Pas de mise à jour optimiste locale : l'affichage
-   * ne change qu'au retour de l'état via le serveur, comme le reste de
-   * l'app. */
-  function moveMeal(id: string, delta: -1 | 1): void {
-    if (!state) return;
-    const ordered = [...state.meals].sort((a, b) => a.order - b.order).map((m) => m.id);
-    const index = ordered.indexOf(id);
-    const targetIndex = index + delta;
-    if (index === -1 || targetIndex < 0 || targetIndex >= ordered.length) return;
-    [ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]];
-    conn.send({ type: "reorderMeals", orderedIds: ordered });
   }
 
   function elementFromHtml(html: string): HTMLLIElement {
@@ -628,13 +642,6 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (expandedIds.has(id)) expandedIds.delete(id);
       else expandedIds.add(id);
       renderMeals();
-    });
-
-    card.querySelector<HTMLButtonElement>('[data-action="move-up"]')?.addEventListener("click", () => {
-      moveMeal(id, -1);
-    });
-    card.querySelector<HTMLButtonElement>('[data-action="move-down"]')?.addEventListener("click", () => {
-      moveMeal(id, 1);
     });
 
     const titleEl = card.querySelector<HTMLElement>('[data-action="edit-title"]');
