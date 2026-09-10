@@ -6,6 +6,7 @@ interface Env {
   MEAL_ROOM: DurableObjectNamespace<MealRoom>;
   ASSETS: Fetcher;
   CREATE_LIST_RATE_LIMITER: RateLimit;
+  READ_LIST_RATE_LIMITER: RateLimit;
 }
 
 // Ambiguous characters (0/O, 1/I) are excluded so codes are easy to read aloud
@@ -109,6 +110,18 @@ export default {
 
     const listMatch = url.pathname.match(/^\/api\/lists\/([A-Za-z0-9]{4,10})(\/ws)?$/);
     if (listMatch) {
+      // Même logique que pour la création (voir plus haut) : lire l'état
+      // d'une liste ou s'y connecter ne demande pas d'authentification, donc
+      // limiter le débit par IP dissuade un script d'essayer des codes en
+      // boucle pour en deviner un valide.
+      const ip = request.headers.get("CF-Connecting-IP");
+      if (ip) {
+        const { success } = await env.READ_LIST_RATE_LIMITER.limit({ key: ip });
+        if (!success) {
+          return jsonError("Trop de tentatives, réessaie dans une minute.", 429);
+        }
+      }
+
       const code = normalizeCode(listMatch[1]);
       const isWs = Boolean(listMatch[2]);
       const stub = env.MEAL_ROOM.get(env.MEAL_ROOM.idFromName(code));

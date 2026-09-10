@@ -54,6 +54,32 @@ test("un nouveau repas apparaît en tête de la liste active", async ({ page }) 
   await expect(page.locator(".meal-title")).toHaveText(["Soupe de légumes", "Curry de légumes", "Tartiflette"]);
 });
 
+test("les flèches monter/descendre réordonnent la liste active", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await page.fill("#add-title", "Curry de légumes");
+  await page.click("#add-form button[type=submit]");
+  await page.fill("#add-title", "Soupe de légumes");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText(["Soupe de légumes", "Curry de légumes", "Tartiflette"]);
+
+  // Rien au-delà des deux bouts de la liste : la flèche "monter" du premier
+  // et la flèche "descendre" du dernier sont désactivées.
+  await expect(page.locator(".meal-card", { hasText: "Soupe de légumes" }).locator('[data-action="move-up"]')).toBeDisabled();
+  await expect(page.locator(".meal-card", { hasText: "Tartiflette" }).locator('[data-action="move-down"]')).toBeDisabled();
+
+  await page.locator(".meal-card", { hasText: "Soupe de légumes" }).locator('[data-action="move-down"]').click();
+  await expect(page.locator(".meal-title")).toHaveText(["Curry de légumes", "Soupe de légumes", "Tartiflette"]);
+
+  await page.locator(".meal-card", { hasText: "Tartiflette" }).locator('[data-action="move-up"]').click();
+  await expect(page.locator(".meal-title")).toHaveText(["Curry de légumes", "Tartiflette", "Soupe de légumes"]);
+});
+
 test("le titre de la liste est modifiable en ligne, et persiste après rechargement", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");

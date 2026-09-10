@@ -108,8 +108,8 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
           touchRecentList(state.code, state.name);
           navigate(`/l/${state.code}`);
         }
-      } catch {
-        errorEl.textContent = "Erreur réseau, réessaie.";
+      } catch (err) {
+        errorEl.textContent = err instanceof ApiError ? err.message : "Erreur réseau, réessaie.";
         errorEl.hidden = false;
       } finally {
         btn.disabled = false;

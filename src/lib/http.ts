@@ -22,6 +22,9 @@ export async function createList(name: string): Promise<ListState> {
 export async function fetchListState(code: string): Promise<ListState | null> {
   const res = await fetch(apiUrl(`/api/lists/${encodeURIComponent(code)}`));
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error("Erreur réseau.");
+  if (!res.ok) {
+    const body: { error?: string } | null = await res.json().catch(() => null);
+    throw new ApiError(body?.error || "Erreur réseau.");
+  }
   return res.json();
 }

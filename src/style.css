@@ -140,6 +140,15 @@ button:focus-visible {
   background: var(--checked-bg);
 }
 
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.icon-btn:disabled:hover {
+  background: transparent;
+}
+
 .icon-btn.danger-hover:hover {
   background: var(--danger);
   color: #fff;
