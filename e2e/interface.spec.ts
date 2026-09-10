@@ -111,6 +111,32 @@ test("annuler la modale « Fait » ne change ni le statut ni la note/commentaire
   await expect(page.locator('#mark-done-note-picker [data-note=""]')).toHaveAttribute("aria-pressed", "true");
 });
 
+test("cliquer « Fait » juste après avoir tapé un commentaire n'en perd pas le contenu (régression)", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await page.click('[data-action="toggle"]');
+
+  // Le clic sur « Fait » déclenche le blur du commentaire (envoi WS) et
+  // l'ouverture de la modale dans le même geste, avant que le serveur n'ait
+  // pu renvoyer l'état à jour (pas de mise à jour optimiste locale) : la
+  // modale doit malgré tout se pré-remplir avec ce qui est affiché à
+  // l'écran, pas une version périmée du repas.
+  await page.fill('[data-field="comment"]', "Recette de mamie");
+  await page.click('.status-pill[data-status="fait"]');
+  await expect(page.locator("#mark-done-comment")).toHaveValue("Recette de mamie");
+  await page.click("#mark-done-confirm");
+
+  // La carte reste dépliée (expandedIds n'est pas remis à zéro par
+  // l'archivage) : pas besoin de recliquer sur le chevron.
+  await page.click('.tab-btn[data-tab="archive"]');
+  await expect(page.locator('[data-field="comment"]')).toHaveValue("Recette de mamie");
+});
+
 test("choisir une suggestion de l'historique reprend le repas archivé plutôt que d'en créer un nouveau", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
