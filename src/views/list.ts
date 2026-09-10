@@ -164,10 +164,19 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string 
   // uniquement sur la liste active, jamais sur l'historique.
   const dragHandle = archived ? "" : `<span class="drag-handle" aria-hidden="true" title="Glisser pour réordonner">${icons.grip}</span>`;
 
-  const actions = archived
-    ? `<button type="button" class="icon-btn" data-action="restore" aria-label="Remettre dans la liste" title="Remettre dans la liste">${icons.undo}</button>
-       <button type="button" class="icon-btn danger-hover" data-action="delete-forever" aria-label="Supprimer définitivement">${icons.trash}</button>`
-    : `<button type="button" class="icon-btn danger-hover" data-action="delete" aria-label="Supprimer">${icons.trash}</button>`;
+  // Repliée, la carte ne garde que l'action la plus utile depuis l'historique
+  // (remettre en liste) ; les suppressions, destructives et rares, n'ont pas
+  // besoin d'être à portée de tap en permanence — elles n'apparaissent
+  // qu'une fois la carte dépliée.
+  const restoreBtn = archived
+    ? `<button type="button" class="icon-btn" data-action="restore" aria-label="Remettre dans la liste" title="Remettre dans la liste">${icons.undo}</button>`
+    : "";
+  const deleteBtn = expanded
+    ? archived
+      ? `<button type="button" class="icon-btn danger-hover" data-action="delete-forever" aria-label="Supprimer définitivement">${icons.trash}</button>`
+      : `<button type="button" class="icon-btn danger-hover" data-action="delete" aria-label="Supprimer">${icons.trash}</button>`
+    : "";
+  const actions = `${restoreBtn}${deleteBtn}`;
 
   const details = expanded
     ? `
@@ -196,7 +205,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string 
 
   return `
     <li class="meal-card${archived ? " archived" : ""}${expanded ? " expanded" : ""}" data-id="${meal.id}">
-      <div class="meal-main">
+      <div class="meal-main" data-action="toggle-row">
         ${dragHandle}
         <button type="button" class="icon-btn meal-toggle" data-action="toggle" aria-expanded="${expanded}" aria-label="${expanded ? "Réduire" : "Déplier"}">${icons.chevronDown}</button>
         ${collapsedEmoji}
@@ -638,10 +647,22 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   function wireMealCard(card: HTMLLIElement, meal: Meal): void {
     const id = meal.id;
 
-    card.querySelector<HTMLButtonElement>('[data-action="toggle"]')?.addEventListener("click", () => {
+    function toggleExpanded(): void {
       if (expandedIds.has(id)) expandedIds.delete(id);
       else expandedIds.add(id);
       renderMeals();
+    }
+
+    card.querySelector<HTMLButtonElement>('[data-action="toggle"]')?.addEventListener("click", toggleExpanded);
+
+    // Élargit la zone cliquable pour déplier/replier au-delà du seul bouton
+    // chevron (poignée de glissé, titre éditable et boutons d'action gardent
+    // leur propre comportement, donc exclus ici — et le bouton chevron a
+    // déjà son propre écouteur juste au-dessus, à ne pas déclencher deux fois).
+    card.querySelector<HTMLElement>('[data-action="toggle-row"]')?.addEventListener("click", (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest(".drag-handle, .meal-controls, .meal-toggle, [data-action='edit-title']")) return;
+      toggleExpanded();
     });
 
     const titleEl = card.querySelector<HTMLElement>('[data-action="edit-title"]');

@@ -24,6 +24,10 @@ test("supprimer un repas demande un second clic au même endroit", async ({ page
   await page.click("#add-form button[type=submit]");
   await expect(page.locator(".meal-title")).toHaveText("Pommes au four");
 
+  // Repliée, la carte ne montre pas le bouton supprimer (action destructive,
+  // rare) : il faut déplier pour y accéder.
+  await page.click('[data-action="toggle"]');
+
   // Premier clic : arme le bouton, ne supprime rien encore.
   await page.click('[data-action="delete"]');
   await expect(page.locator('[data-action="delete"]')).toHaveClass(/confirm-armed/);
@@ -284,6 +288,31 @@ test("les repas sont repliés par défaut, s'ouvrent au clic, et « Tout déplie
   await page.click("#toggle-all-btn");
   await expect(page.locator(".meal-card.expanded")).toHaveCount(0);
   await expect(page.locator("#toggle-all-btn")).toHaveText("Tout déplier");
+});
+
+test("le bouton supprimer n'apparaît qu'une fois la carte dépliée, et toute la ligne (sauf le titre) déplie/replie", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+
+  // Repliée : pas de bouton supprimer, action destructive rare.
+  await expect(page.locator('[data-action="delete"]')).toHaveCount(0);
+
+  // Cliquer sur la ligne hors chevron (ici l'emoji de statut) déplie aussi.
+  await page.click(".meal-collapsed-emoji");
+  await expect(page.locator(".meal-card")).toHaveClass(/expanded/);
+  await expect(page.locator('[data-action="delete"]')).toBeVisible();
+
+  // Cliquer sur le titre édite plutôt que de replier la carte.
+  await page.click('[data-action="edit-title"]');
+  await expect(page.locator(".meal-card .inline-edit")).toBeVisible();
+  await expect(page.locator(".meal-card")).toHaveClass(/expanded/);
+  await page.keyboard.press("Escape");
 });
 
 test("au format replié, affiche l'emoji du statut (en cours) ou de la note (historique)", async ({ page }) => {
