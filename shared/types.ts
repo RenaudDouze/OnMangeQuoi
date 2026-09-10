@@ -1,5 +1,16 @@
 // Types shared between the worker (Durable Object) and the client app.
 
+// Bornes appliquées aussi bien côté client (attributs maxlength, confort de
+// saisie) que côté serveur (reducer.ts) : n'importe qui ayant le code peut
+// écrire dans une liste sans authentification, donc le serveur ne doit pas
+// se fier au seul client pour empêcher un texte ou une liste démesurés.
+export const MAX_TITLE_LENGTH = 120;
+export const MAX_LIST_NAME_LENGTH = 60;
+export const MAX_SOURCE_LENGTH = 300;
+export const MAX_COMMENT_LENGTH = 2000;
+/** Total repas actifs + archivés : au-delà, les nouveaux ajouts sont ignorés. */
+export const MAX_MEALS_TOTAL = 1000;
+
 export type MealStatus = "idee" | "validee" | "commandee" | "rangee" | "non_complet" | "fait";
 
 export const MEAL_STATUSES: MealStatus[] = ["idee", "validee", "commandee", "rangee", "non_complet", "fait"];

@@ -56,11 +56,25 @@ export default {
         .catch(() => ({}) as { name?: string });
 
       let code = generateCode();
+      let codeIsFree = false;
       for (let attempt = 0; attempt < 5; attempt++) {
         const stub = env.MEAL_ROOM.get(env.MEAL_ROOM.idFromName(code));
         const existing = await stub.fetch("https://list.internal/state");
-        if (existing.status === 404) break;
+        if (existing.status === 404) {
+          codeIsFree = true;
+          break;
+        }
         code = generateCode();
+      }
+      // Ne devrait jamais arriver (33^6 codes possibles) : évite de renvoyer
+      // par erreur la liste de quelqu'un d'autre si les 5 tentatives ont
+      // toutes collisionné, plutôt que de continuer avec un code qui n'est
+      // pas réellement libre.
+      if (!codeIsFree) {
+        return new Response(JSON.stringify({ error: "Impossible de générer un code de liste unique, réessaie." }), {
+          status: 503,
+          headers: { "content-type": "application/json", ...CORS_HEADERS },
+        });
       }
 
       const stub = env.MEAL_ROOM.get(env.MEAL_ROOM.idFromName(code));

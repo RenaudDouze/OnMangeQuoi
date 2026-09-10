@@ -3,6 +3,7 @@
 // Workers runtime (storage, WebSockets, ctx...).
 
 import type { ListState, ClientMessage, Meal } from "../shared/types";
+import { MAX_TITLE_LENGTH, MAX_LIST_NAME_LENGTH, MAX_SOURCE_LENGTH, MAX_COMMENT_LENGTH, MAX_MEALS_TOTAL } from "../shared/types";
 
 export function nextOrder(list: { order: number }[]): number {
   return list.length === 0 ? 0 : Math.max(...list.map((x) => x.order)) + 1;
@@ -25,14 +26,18 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       return;
 
     case "renameList": {
-      const name = msg.name.trim();
+      const name = msg.name.trim().slice(0, MAX_LIST_NAME_LENGTH);
       if (name) state.name = name;
       return;
     }
 
     case "addMeal": {
-      const title = msg.title.trim();
+      const title = msg.title.trim().slice(0, MAX_TITLE_LENGTH);
       if (!title) return;
+      // N'importe qui ayant le code peut écrire sans authentification : cette
+      // borne évite qu'un client (buggé ou malveillant) ne fasse grossir la
+      // liste indéfiniment.
+      if (state.meals.length + state.archive.length >= MAX_MEALS_TOTAL) return;
       const meal: Meal = {
         id: msg.id,
         title,
@@ -53,11 +58,11 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       const meal = findMeal(state, msg.id);
       if (!meal) return;
       if (msg.title !== undefined) {
-        const title = msg.title.trim();
+        const title = msg.title.trim().slice(0, MAX_TITLE_LENGTH);
         if (title) meal.title = title;
       }
-      if (msg.source !== undefined) meal.source = msg.source;
-      if (msg.comment !== undefined) meal.comment = msg.comment;
+      if (msg.source !== undefined) meal.source = msg.source.slice(0, MAX_SOURCE_LENGTH);
+      if (msg.comment !== undefined) meal.comment = msg.comment.slice(0, MAX_COMMENT_LENGTH);
       meal.updatedAt = now;
       return;
     }
