@@ -543,9 +543,8 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
             : "Aucun repas dans l'historique pour le moment.";
     } else {
       emptyEl.hidden = true;
-      listEl.innerHTML = meals.map((m) => mealCardHtml(m, tab === "archive", expandedIds.has(m.id))).join("");
+      reconcileMealList(listEl, meals);
     }
-    wireMealCards();
 
     const toggleAllBtn = root.querySelector("#toggle-all-btn") as HTMLButtonElement | null;
     if (toggleAllBtn) {
@@ -555,83 +554,121 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     }
   }
 
-  function wireMealCards(): void {
-    const listEl = root.querySelector("#meal-list") as HTMLElement | null;
-    if (!listEl || !state) return;
+  /** Id du repas dont un champ texte (titre/source en édition en ligne, ou
+   * commentaire) a le focus dans `listEl`, s'il y en a un. Un simple bouton
+   * ayant le focus (ex: juste après un clic sur le chevron) ne compte pas :
+   * lui seul régénère volontairement sa carte pour refléter le nouvel état. */
+  function focusedMealId(listEl: HTMLElement): string | null {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) return null;
+    const card = active.closest<HTMLElement>(".meal-card");
+    return card && listEl.contains(card) ? (card.dataset.id ?? null) : null;
+  }
 
-    listEl.querySelectorAll<HTMLLIElement>(".meal-card").forEach((card) => {
-      const id = card.dataset.id!;
-      const meal = (tab === "active" ? state!.meals : state!.archive).find((m) => m.id === id);
-      if (!meal) return;
+  /** Reconstruit la liste sans jamais régénérer la carte en cours d'édition :
+   * comme il n'y a pas de mise à jour optimiste locale (voir ListConnection),
+   * une mise à jour temps réel reçue pendant qu'on tape effacerait sinon la
+   * saisie non encore validée (le nœud DOM de l'input/textarea serait détruit
+   * et recréé avec l'ancienne valeur venue du serveur). */
+  function reconcileMealList(listEl: HTMLElement, meals: Meal[]): void {
+    const frozenId = focusedMealId(listEl);
+    const existingById = new Map<string, HTMLLIElement>();
+    listEl.querySelectorAll<HTMLLIElement>(".meal-card").forEach((li) => {
+      if (li.dataset.id) existingById.set(li.dataset.id, li);
+    });
 
-      card.querySelector<HTMLButtonElement>('[data-action="toggle"]')?.addEventListener("click", () => {
-        if (expandedIds.has(id)) expandedIds.delete(id);
-        else expandedIds.add(id);
-        renderMeals();
+    const cards = meals.map((meal) => {
+      const existing = meal.id === frozenId ? existingById.get(meal.id) : undefined;
+      if (existing) return existing;
+      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expandedIds.has(meal.id)));
+      wireMealCard(card, meal);
+      return card;
+    });
+    listEl.replaceChildren(...cards);
+  }
+
+  function elementFromHtml(html: string): HTMLLIElement {
+    const template = document.createElement("template");
+    template.innerHTML = html.trim();
+    return template.content.firstElementChild as HTMLLIElement;
+  }
+
+  function wireMealCard(card: HTMLLIElement, meal: Meal): void {
+    const id = meal.id;
+
+    card.querySelector<HTMLButtonElement>('[data-action="toggle"]')?.addEventListener("click", () => {
+      if (expandedIds.has(id)) expandedIds.delete(id);
+      else expandedIds.add(id);
+      renderMeals();
+    });
+
+    const titleEl = card.querySelector<HTMLElement>('[data-action="edit-title"]');
+    titleEl?.addEventListener("click", () => {
+      startEdit(titleEl, {
+        value: meal.title,
+        maxLength: MAX_TITLE_LENGTH,
+        onCommit: (value) => {
+          if (value) conn.send({ type: "updateMeal", id, title: value });
+          else render();
+        },
       });
+    });
 
-      const titleEl = card.querySelector<HTMLElement>('[data-action="edit-title"]');
-      titleEl?.addEventListener("click", () => {
-        startEdit(titleEl, {
-          value: meal.title,
-          maxLength: MAX_TITLE_LENGTH,
-          onCommit: (value) => {
-            if (value) conn.send({ type: "updateMeal", id, title: value });
-            else render();
-          },
-        });
+    const sourceEl = card.querySelector<HTMLElement>('[data-action="edit-source"]');
+    sourceEl?.addEventListener("click", () => {
+      startEdit(sourceEl, {
+        value: meal.source,
+        placeholder: "Lien ou texte libre",
+        maxLength: MAX_SOURCE_LENGTH,
+        onCommit: (value) => conn.send({ type: "updateMeal", id, source: value }),
       });
+    });
 
-      const sourceEl = card.querySelector<HTMLElement>('[data-action="edit-source"]');
-      sourceEl?.addEventListener("click", () => {
-        startEdit(sourceEl, {
-          value: meal.source,
-          placeholder: "Lien ou texte libre",
-          maxLength: MAX_SOURCE_LENGTH,
-          onCommit: (value) => conn.send({ type: "updateMeal", id, source: value }),
-        });
+    card.querySelectorAll<HTMLButtonElement>(".status-pill").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const status = btn.dataset.status as MealStatus;
+        if (status === meal.status) return;
+        if (status === "fait") {
+          // Lit la valeur en direct du textarea plutôt que meal.comment (qui
+          // peut être périmé si on clique juste après avoir tapé, avant que
+          // le blur n'ait eu le temps de synchroniser) : la modale doit
+          // toujours proposer ce qui est effectivement affiché.
+          const commentEl = card.querySelector<HTMLTextAreaElement>('[data-field="comment"]');
+          const mealForModal = commentEl ? { ...meal, comment: commentEl.value } : meal;
+          openMarkDoneModal(mealForModal, (note, comment, doneAt) => {
+            conn.send({ type: "updateMeal", id, comment });
+            conn.send({ type: "setMealNote", id, note });
+            conn.send({ type: "setMealStatus", id, status: "fait", doneAt });
+            showUndoToast("Repas déplacé vers l'historique.", () => conn.send({ type: "restoreMeal", id }));
+          });
+          return;
+        }
+        conn.send({ type: "setMealStatus", id, status });
       });
+    });
 
-      card.querySelectorAll<HTMLButtonElement>(".status-pill").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const status = btn.dataset.status as MealStatus;
-          if (status === meal.status) return;
-          if (status === "fait") {
-            openMarkDoneModal(meal, (note, comment, doneAt) => {
-              conn.send({ type: "updateMeal", id, comment });
-              conn.send({ type: "setMealNote", id, note });
-              conn.send({ type: "setMealStatus", id, status: "fait", doneAt });
-              showUndoToast("Repas déplacé vers l'historique.", () => conn.send({ type: "restoreMeal", id }));
-            });
-            return;
-          }
-          conn.send({ type: "setMealStatus", id, status });
-        });
+    card.querySelector<HTMLTextAreaElement>('[data-field="comment"]')?.addEventListener("blur", (e) => {
+      conn.send({ type: "updateMeal", id, comment: (e.target as HTMLTextAreaElement).value });
+    });
+
+    const deleteBtn = card.querySelector<HTMLButtonElement>('[data-action="delete"]');
+    if (deleteBtn) {
+      wireConfirmClick(deleteBtn, {
+        armedLabel: "Confirmer la suppression ?",
+        onConfirm: () => conn.send({ type: "deleteMeal", id }),
       });
+    }
 
-      card.querySelector<HTMLTextAreaElement>('[data-field="comment"]')?.addEventListener("blur", (e) => {
-        conn.send({ type: "updateMeal", id, comment: (e.target as HTMLTextAreaElement).value });
+    const deleteForeverBtn = card.querySelector<HTMLButtonElement>('[data-action="delete-forever"]');
+    if (deleteForeverBtn) {
+      wireConfirmClick(deleteForeverBtn, {
+        armedLabel: "Confirmer la suppression définitive ?",
+        onConfirm: () => conn.send({ type: "deleteArchivedMeal", id }),
       });
+    }
 
-      const deleteBtn = card.querySelector<HTMLButtonElement>('[data-action="delete"]');
-      if (deleteBtn) {
-        wireConfirmClick(deleteBtn, {
-          armedLabel: "Confirmer la suppression ?",
-          onConfirm: () => conn.send({ type: "deleteMeal", id }),
-        });
-      }
-
-      const deleteForeverBtn = card.querySelector<HTMLButtonElement>('[data-action="delete-forever"]');
-      if (deleteForeverBtn) {
-        wireConfirmClick(deleteForeverBtn, {
-          armedLabel: "Confirmer la suppression définitive ?",
-          onConfirm: () => conn.send({ type: "deleteArchivedMeal", id }),
-        });
-      }
-
-      card.querySelector<HTMLButtonElement>('[data-action="restore"]')?.addEventListener("click", () => {
-        conn.send({ type: "restoreMeal", id });
-      });
+    card.querySelector<HTMLButtonElement>('[data-action="restore"]')?.addEventListener("click", () => {
+      conn.send({ type: "restoreMeal", id });
     });
   }
 

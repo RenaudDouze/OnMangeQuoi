@@ -1,4 +1,4 @@
-import { createList, fetchListState } from "../lib/http";
+import { createList, fetchListState, ApiError } from "../lib/http";
 import { getRecentLists, forgetRecentList, touchRecentList } from "../lib/storage";
 import { escapeHtml } from "../lib/dom";
 import { icons } from "../lib/icons";
@@ -83,8 +83,8 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
         const state = await createList(nameInput.value.trim() || "On mange quoi ?");
         touchRecentList(state.code, state.name);
         navigate(`/l/${state.code}`);
-      } catch {
-        alert("Impossible de créer la liste. Vérifie ta connexion internet.");
+      } catch (err) {
+        alert(err instanceof ApiError ? err.message : "Impossible de créer la liste. Vérifie ta connexion internet.");
         btn.disabled = false;
       }
     });

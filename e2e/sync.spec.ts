@@ -73,3 +73,50 @@ test("un repas en cours de création n'est pas effacé par une mise à jour reç
   await ctx1.close();
   await ctx2.close();
 });
+
+test("un commentaire en cours de frappe n'est pas effacé par une mise à jour reçue en direct (régression)", async ({ browser }) => {
+  // Même principe que le test précédent, mais pour le commentaire d'une
+  // carte plutôt que le formulaire d'ajout : renderMeals() ne doit jamais
+  // reconstruire la carte du repas actuellement en cours d'édition (elle
+  // gèle celle où le focus est dans un champ texte), sous peine de perdre un
+  // commentaire pas encore validé (pas de blur) dès qu'un autre appareil
+  // modifie la liste au même moment.
+  const ctx1 = await browser.newContext();
+  const ctx2 = await browser.newContext();
+  const page1 = await ctx1.newPage();
+  const page2 = await ctx2.newPage();
+
+  await page1.goto("/");
+  await page1.click("#create-form button[type=submit]");
+  await page1.waitForURL(/\/l\//);
+  const code = page1.url().split("/l/")[1];
+  await expect(page1.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page1.fill("#add-title", "Tartiflette");
+  await page1.click("#add-form button[type=submit]");
+  await expect(page1.locator(".meal-title")).toHaveText("Tartiflette");
+  await page1.click('[data-action="toggle"]');
+
+  await page2.goto(`/l/${code}`);
+  await expect(page2.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+  await expect(page2.locator(".meal-title")).toHaveText("Tartiflette", { timeout: 5000 });
+  await page2.click('[data-action="toggle"]');
+
+  // page1 commence à taper un commentaire mais ne le valide pas (pas de blur).
+  await page1.fill('[data-field="comment"]', "Recette de mamie");
+
+  // page2 déclenche une diffusion d'état (un ajout) pendant que page1 tape.
+  await page2.fill("#add-title", "Soupe de légumes");
+  await page2.click("#add-form button[type=submit]");
+  await expect(page1.locator(".meal-title", { hasText: "Soupe de légumes" })).toBeVisible({ timeout: 5000 });
+
+  // Le commentaire non encore validé doit avoir survécu à la reconstruction
+  // de la liste déclenchée par l'ajout reçu de page2.
+  await expect(page1.locator('[data-field="comment"]')).toHaveValue("Recette de mamie");
+
+  await page1.locator('[data-field="comment"]').blur();
+  await expect(page2.locator('[data-field="comment"]')).toHaveValue("Recette de mamie", { timeout: 5000 });
+
+  await ctx1.close();
+  await ctx2.close();
+});

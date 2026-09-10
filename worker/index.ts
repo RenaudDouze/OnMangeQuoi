@@ -5,6 +5,7 @@ export { MealRoom };
 interface Env {
   MEAL_ROOM: DurableObjectNamespace<MealRoom>;
   ASSETS: Fetcher;
+  CREATE_LIST_RATE_LIMITER: RateLimit;
 }
 
 // Ambiguous characters (0/O, 1/I) are excluded so codes are easy to read aloud
@@ -42,6 +43,13 @@ async function jsonPassthrough(res: Response): Promise<Response> {
   });
 }
 
+function jsonError(message: string, status: number): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { "content-type": "application/json", ...CORS_HEADERS },
+  });
+}
+
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
@@ -51,6 +59,22 @@ export default {
     }
 
     if (url.pathname === "/api/lists" && request.method === "POST") {
+      // Pas d'authentification pour créer une liste : sans ça, un script
+      // pourrait en créer en boucle (coût de stockage, Durable Objects
+      // orphelines). L'IP n'identifie pas la personne de façon fiable (NAT,
+      // proxy, IPv6 tournant), juste de quoi limiter le débit d'un même
+      // point d'origine. Cet en-tête n'existe qu'une fois passé par le réseau
+      // Cloudflare (absent en dev local et dans les tests e2e) : pas de
+      // valeur de repli qui regrouperait tout le monde sous une même clé,
+      // ce qui bloquerait tout le monde à la moindre rafale légitime.
+      const ip = request.headers.get("CF-Connecting-IP");
+      if (ip) {
+        const { success } = await env.CREATE_LIST_RATE_LIMITER.limit({ key: ip });
+        if (!success) {
+          return jsonError("Trop de listes créées récemment, réessaie dans une minute.", 429);
+        }
+      }
+
       const body = await request
         .json<{ name?: string }>()
         .catch(() => ({}) as { name?: string });
@@ -71,10 +95,7 @@ export default {
       // toutes collisionné, plutôt que de continuer avec un code qui n'est
       // pas réellement libre.
       if (!codeIsFree) {
-        return new Response(JSON.stringify({ error: "Impossible de générer un code de liste unique, réessaie." }), {
-          status: 503,
-          headers: { "content-type": "application/json", ...CORS_HEADERS },
-        });
+        return jsonError("Impossible de générer un code de liste unique, réessaie.", 503);
       }
 
       const stub = env.MEAL_ROOM.get(env.MEAL_ROOM.idFromName(code));
