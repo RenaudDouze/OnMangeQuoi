@@ -160,10 +160,6 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string 
     ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
     : statusPickerHtml(meal.status);
 
-  // Poignée de glissé pour réordonner (voir wireMealList/SortableJS) :
-  // uniquement sur la liste active, jamais sur l'historique.
-  const dragHandle = archived ? "" : `<span class="drag-handle" aria-hidden="true" title="Glisser pour réordonner">${icons.grip}</span>`;
-
   // Repliée, la carte ne garde que l'action la plus utile depuis l'historique
   // (remettre en liste) ; les suppressions, destructives et rares, n'ont pas
   // besoin d'être à portée de tap en permanence — elles n'apparaissent
@@ -203,11 +199,18 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string 
         : ""
       : `<span class="meal-collapsed-emoji" aria-hidden="true">${emojiOf(MEAL_STATUS_LABELS[meal.status])}</span>`;
 
+  // Sur la liste active, le chevron sert aussi de poignée de glissé (voir
+  // wireMealList/SortableJS) : un tap déplie/replie, un appui-glissé
+  // réordonne. Le navigateur ne déclenche pas de "click" après un glissé
+  // avec déplacement, donc pas d'ambiguïté entre les deux gestes — et un
+  // seul élément plutôt que deux économise de la place sur la ligne
+  // repliée. Sur l'historique (jamais réordonnable), c'est un bouton simple.
+  const toggleBtn = `<button type="button" class="icon-btn meal-toggle${archived ? "" : " drag-handle"}" data-action="toggle" aria-expanded="${expanded}" aria-label="${expanded ? "Réduire" : "Déplier"}"${archived ? "" : ` title="Glisser pour réordonner"`}>${archived ? icons.chevronDown : icons.grip}</button>`;
+
   return `
     <li class="meal-card${archived ? " archived" : ""}${expanded ? " expanded" : ""}" data-id="${meal.id}">
       <div class="meal-main" data-action="toggle-row">
-        ${dragHandle}
-        <button type="button" class="icon-btn meal-toggle" data-action="toggle" aria-expanded="${expanded}" aria-label="${expanded ? "Réduire" : "Déplier"}">${icons.chevronDown}</button>
+        ${toggleBtn}
         ${collapsedEmoji}
         <h3 class="meal-title" data-action="edit-title" tabindex="0">${escapeHtml(meal.title)}</h3>
         <div class="meal-controls">${actions}</div>
@@ -451,11 +454,12 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   }
 
   /** Réordonner la liste active à la main : glisser une carte par sa
-   * poignée (`.drag-handle`, absente sur l'historique — SortableJS n'a donc
-   * rien à saisir côté archive). Pas de mise à jour optimiste "posée" : le
-   * DOM reflète déjà le nouvel ordre pendant/après le glissé (SortableJS
-   * déplace les vrais nœuds), et le prochain état renvoyé par le serveur
-   * confirme (ou corrige) l'affichage, comme pour le reste de l'app. */
+   * poignée (`.drag-handle`, le bouton chevron — absente sur l'historique,
+   * qui n'est jamais réordonnable — SortableJS n'a donc rien à saisir côté
+   * archive). Pas de mise à jour optimiste "posée" : le DOM reflète déjà le
+   * nouvel ordre pendant/après le glissé (SortableJS déplace les vrais
+   * nœuds), et le prochain état renvoyé par le serveur confirme (ou
+   * corrige) l'affichage, comme pour le reste de l'app. */
   function wireMealList(): void {
     const listEl = root.querySelector("#meal-list") as HTMLElement | null;
     if (!listEl) return;

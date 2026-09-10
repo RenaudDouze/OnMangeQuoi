@@ -521,11 +521,9 @@ button:focus-visible {
   padding: 0.25em;
 }
 
+/* Toujours combinée à .icon-btn.meal-toggle (voir mealCardHtml) : ne
+   redéfinit que ce qui diffère d'un icon-btn ordinaire. */
 .drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
   padding: 0.4em;
   color: var(--text-muted);
   cursor: grab;
