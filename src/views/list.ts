@@ -161,12 +161,14 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string 
   const restoreBtn = archived
     ? `<button type="button" class="icon-btn" data-action="restore" aria-label="Remettre dans la liste" title="Remettre dans la liste">${icons.undo}</button>`
     : "";
-  const deleteBtn = expanded
-    ? archived
-      ? `<button type="button" class="icon-btn danger-hover" data-action="delete-forever" aria-label="Supprimer définitivement">${icons.trash}</button>`
-      : `<button type="button" class="icon-btn danger-hover" data-action="delete" aria-label="Supprimer">${icons.trash}</button>`
-    : "";
-  const actions = `${restoreBtn}${deleteBtn}`;
+
+  // Le bouton supprimer vit dans le contenu déplié plutôt que sur la ligne
+  // du titre (voir .meal-main) : son apparition/disparition au dépli n'y
+  // change plus la place laissée au titre, qui garde une largeur stable
+  // qu'on soit replié ou déplié.
+  const deleteBtn = archived
+    ? `<button type="button" class="icon-btn danger-hover" data-action="delete-forever" aria-label="Supprimer définitivement">${icons.trash}</button>`
+    : `<button type="button" class="icon-btn danger-hover" data-action="delete" aria-label="Supprimer">${icons.trash}</button>`;
 
   const details = expanded
     ? `
@@ -180,6 +182,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string 
           <span class="meal-field-label">Commentaire</span>
           <textarea class="meal-comment" data-field="comment" placeholder="Une note sur ce repas…" rows="2" maxlength="${MAX_COMMENT_LENGTH}">${escapeHtml(meal.comment)}</textarea>
         </div>
+        <div class="meal-details-actions">${deleteBtn}</div>
       </div>`
     : "";
 
@@ -203,7 +206,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean): string 
       <div class="meal-main" data-action="toggle-row">
         ${toggleBtn}
         <h3 class="meal-title" data-action="edit-title" tabindex="0">${escapeHtml(meal.title)}</h3>
-        <div class="meal-controls">${actions}</div>
+        <div class="meal-controls">${restoreBtn}</div>
       </div>
       ${details}
     </li>`;

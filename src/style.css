@@ -702,6 +702,11 @@ button:focus-visible {
   letter-spacing: 0.03em;
 }
 
+.meal-details-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .meal-source {
   border: 1px solid var(--border);
   border-radius: 8px;
