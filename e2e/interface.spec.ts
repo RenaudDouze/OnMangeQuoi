@@ -303,8 +303,12 @@ test("le bouton supprimer n'apparaît qu'une fois la carte dépliée, et toute l
   // Repliée : pas de bouton supprimer, action destructive rare.
   await expect(page.locator('[data-action="delete"]')).toHaveCount(0);
 
-  // Cliquer sur la ligne hors chevron (ici l'emoji de statut) déplie aussi.
-  await page.click(".meal-collapsed-emoji");
+  // Cliquer sur la ligne hors chevron/titre (ici le fond de la ligne, sous
+  // le titre — la poignée, plus haute, définit la hauteur de la ligne)
+  // déplie aussi.
+  const main = page.locator(".meal-main");
+  const box = (await main.boundingBox())!;
+  await main.click({ position: { x: box.width / 2, y: box.height - 2 } });
   await expect(page.locator(".meal-card")).toHaveClass(/expanded/);
   await expect(page.locator('[data-action="delete"]')).toBeVisible();
 
@@ -315,51 +319,46 @@ test("le bouton supprimer n'apparaît qu'une fois la carte dépliée, et toute l
   await page.keyboard.press("Escape");
 });
 
-test("au format replié, affiche l'emoji du statut (en cours) ou de la note (historique)", async ({ page }) => {
+test("le liséré de couleur de la carte suit le statut (en cours) ou la note (historique)", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
   await page.waitForURL(/\/l\//);
   await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
 
-  // Repas actif : l'emoji du statut "Idée" (par défaut) est visible replié.
+  // Repas actif : le statut "Idée" (par défaut) donne sa couleur au bord de la carte.
   await page.fill("#add-title", "Tartiflette");
   await page.click("#add-form button[type=submit]");
   await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
-  await expect(page.locator(".meal-collapsed-emoji")).toHaveText("💡");
+  await expect(page.locator(".meal-card")).toHaveAttribute("data-status", "idee");
 
   // Il suit le statut choisi.
   await page.click('[data-action="toggle"]');
   await page.click('.status-pill[data-status="validee"]');
-  await page.click('[data-action="toggle"]');
-  await expect(page.locator(".meal-collapsed-emoji")).toHaveText("✅");
+  await expect(page.locator(".meal-card")).toHaveAttribute("data-status", "validee");
 
-  // Passage en "Fait" avec une note : dans l'historique, replié, c'est
-  // l'emoji de la note qui s'affiche (plus celui du statut).
-  await page.click('[data-action="toggle"]');
+  // Passage en "Fait" avec une note : dans l'historique, c'est la note qui
+  // donne sa couleur à la carte (plus le statut, "Fait" pour tous).
   await page.click('.status-pill[data-status="fait"]');
   await page.click('#mark-done-note-picker [data-note="quand_tu_veux"]');
   await page.click("#mark-done-confirm");
 
   await page.click('.tab-btn[data-tab="archive"]');
   await expect(page.locator(".meal-card")).toHaveCount(1);
-  // Toujours ouvert depuis l'étape précédente (l'état replié/déplié suit le
-  // repas d'un onglet à l'autre) : le replier pour vérifier l'aperçu.
-  await page.click('[data-action="toggle"]');
-  await expect(page.locator(".meal-card")).not.toHaveClass(/expanded/);
-  await expect(page.locator(".meal-collapsed-emoji")).toHaveText("😍");
+  await expect(page.locator(".meal-card")).toHaveAttribute("data-note", "quand_tu_veux");
+  await expect(page.locator(".meal-card")).not.toHaveAttribute("data-status");
 
-  // Un repas archivé sans note n'affiche aucun emoji replié (la note reste
+  // Un repas archivé sans note n'a pas de liséré de couleur (la note reste
   // mémorisée après une remise en liste : il faut explicitement l'effacer).
   await page.click('[data-action="restore"]');
   await page.click('.tab-btn[data-tab="active"]');
-  await page.click('[data-action="toggle"]');
+  // La carte est restée dépliée depuis l'étape précédente (l'état
+  // replié/déplié suit le repas d'un onglet à l'autre) : le statut est
+  // donc déjà accessible sans re-cliquer sur le chevron.
   await page.click('.status-pill[data-status="fait"]');
   await page.click('#mark-done-note-picker [data-note=""]');
   await page.click("#mark-done-confirm");
   await page.click('.tab-btn[data-tab="archive"]');
-  await page.click('[data-action="toggle"]');
-  await expect(page.locator(".meal-card")).not.toHaveClass(/expanded/);
-  await expect(page.locator(".meal-collapsed-emoji")).toHaveCount(0);
+  await expect(page.locator(".meal-card")).not.toHaveAttribute("data-note");
 });
 
 test("le panneau de partage affiche le code de la liste", async ({ page }) => {
