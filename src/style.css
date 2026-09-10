@@ -469,12 +469,62 @@ button:focus-visible {
 .meal-card {
   background: var(--surface);
   border: 1px solid var(--border);
+  /* Liséré de couleur (voir data-status/data-note ci-dessous) : un repère
+     de statut/note compact, qui ne prend de place que sur le bord de la
+     carte plutôt qu'une icône dans la ligne repliée. */
+  border-left-width: 4px;
   border-radius: 14px;
   padding: 0.9rem 1rem;
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+}
+
+/* Mêmes couleurs que .status-pill[data-status][aria-pressed="true"]. */
+.meal-card[data-status="idee"] {
+  border-left-color: #8d8177;
+}
+
+.meal-card[data-status="validee"] {
+  border-left-color: #3b6ea5;
+}
+
+.meal-card[data-status="commandee"] {
+  border-left-color: #7c5cbf;
+}
+
+.meal-card[data-status="rangee"] {
+  border-left-color: #2b8f86;
+}
+
+.meal-card[data-status="non_complet"] {
+  border-left-color: var(--danger);
+}
+
+.meal-card[data-status="fait"] {
+  border-left-color: #2f9e52;
+}
+
+/* Mêmes couleurs que .note-option[data-note][aria-pressed="true"]. */
+.meal-card[data-note="plus_jamais"] {
+  border-left-color: var(--danger);
+}
+
+.meal-card[data-note="mouais"] {
+  border-left-color: #c9822c;
+}
+
+.meal-card[data-note="remplacer"] {
+  border-left-color: #7c5cbf;
+}
+
+.meal-card[data-note="de_temps_en_temps"] {
+  border-left-color: #2b8f86;
+}
+
+.meal-card[data-note="quand_tu_veux"] {
+  border-left-color: #2f9e52;
 }
 
 .meal-card.archived {
@@ -542,13 +592,6 @@ button:focus-visible {
 
 .meal-card.sortable-ghost {
   opacity: 0.4;
-}
-
-.meal-collapsed-emoji {
-  flex-shrink: 0;
-  font-size: 1.05rem;
-  line-height: 1;
-  padding: 0.4em 0;
 }
 
 .meal-toggle svg {
