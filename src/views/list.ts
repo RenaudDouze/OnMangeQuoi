@@ -156,7 +156,7 @@ function openImageLightbox(url: string, alt: string): void {
   overlay.className = "modal-overlay image-lightbox-overlay";
   overlay.innerHTML = `
     <button type="button" class="icon-btn image-lightbox-close" aria-label="Fermer">${icons.close}</button>
-    <img src="${url}" alt="${escapeHtml(alt)}" class="image-lightbox-img" />`;
+    <img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" class="image-lightbox-img" />`;
   document.body.appendChild(overlay);
 
   const close = () => {
@@ -181,7 +181,7 @@ function mealImageFieldHtml(meal: Meal, code: string): string {
   const content = meal.hasImage
     ? `<div class="meal-image-preview">
         <button type="button" class="meal-image-view" data-action="view-image">
-          <img src="${mealImageUrl(code, meal.id, meal.imageVersion)}" alt="Photo de « ${escapeHtml(meal.title)} »" loading="lazy" />
+          <img src="${escapeHtml(mealImageUrl(code, meal.id, meal.imageVersion))}" alt="Photo de « ${escapeHtml(meal.title)} »" loading="lazy" />
         </button>
         <button type="button" class="icon-btn danger-hover meal-image-remove" data-action="remove-image" aria-label="Supprimer l'image">${icons.trash}</button>
       </div>`
