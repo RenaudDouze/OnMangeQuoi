@@ -36,7 +36,11 @@ function normalizeCode(code: string): string {
 // par les navigateurs), donc pas ajoutés sur cette route.
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, OPTIONS",
+  // PUT/DELETE : ajoutés pour la route image (voir plus bas). Sans eux, le
+  // préflight CORS autorise la requête mais le navigateur bloque ensuite la
+  // vraie requête PUT/DELETE en cross-origin (échec silencieux côté fetch,
+  // sans réponse HTTP à lire — d'où un simple "Erreur réseau" côté client).
+  "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
   "access-control-allow-headers": "content-type",
 };
 
