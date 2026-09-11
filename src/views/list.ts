@@ -148,28 +148,56 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
   (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement)?.focus();
 }
 
-/** Replié par défaut (juste le titre) : le contenu (statut, source,
- * commentaire) ne s'affiche qu'une fois déplié, au clic sur le chevron ou
- * via "Tout déplier" — voir expandedIds dans mountListView. */
+/** Affiche une image en plein écran (clic sur une miniature) : overlay
+ * sombre, fermeture au clic n'importe où dessus, sur Échap, ou sur le
+ * bouton fermer — même mécanique que openMarkDoneModal. */
+function openImageLightbox(url: string, alt: string): void {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay image-lightbox-overlay";
+  overlay.innerHTML = `
+    <button type="button" class="icon-btn image-lightbox-close" aria-label="Fermer">${icons.close}</button>
+    <img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" class="image-lightbox-img" />`;
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", onKeydown);
+  };
+  function onKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape") close();
+  }
+  overlay.addEventListener("click", close);
+  document.addEventListener("keydown", onKeydown);
+}
+
 /** Photo ou capture d'écran jointe : bouton d'ajout si absente, sinon
- * miniature + suppression. Uploadée via un input file (data-action="add-
- * image") ou en collant depuis le presse-papiers (voir wireMealCard) —
- * les deux passent par la même fonction d'envoi. */
+ * miniature (cliquable pour l'afficher en plein écran) + suppression.
+ * Uploadée via un input file (data-action="add-image") ou en collant
+ * depuis le presse-papiers (voir wireMealCard) — les deux passent par la
+ * même fonction d'envoi, dont l'indicateur de chargement ci-dessous
+ * (masqué par défaut) reflète la progression : sans lui, le temps
+ * d'attente réseau donne l'impression que rien ne s'est passé. */
 function mealImageFieldHtml(meal: Meal, code: string): string {
   const content = meal.hasImage
     ? `<div class="meal-image-preview">
-        <img src="${mealImageUrl(code, meal.id, meal.imageVersion)}" alt="Photo de « ${escapeHtml(meal.title)} »" loading="lazy" />
+        <button type="button" class="meal-image-view" data-action="view-image">
+          <img src="${escapeHtml(mealImageUrl(code, meal.id, meal.imageVersion))}" alt="Photo de « ${escapeHtml(meal.title)} »" loading="lazy" />
+        </button>
         <button type="button" class="icon-btn danger-hover meal-image-remove" data-action="remove-image" aria-label="Supprimer l'image">${icons.trash}</button>
       </div>`
     : `<button type="button" class="btn meal-image-add" data-action="add-image">${icons.image} Ajouter une photo</button>`;
   return `
-    <div class="meal-field">
+    <div class="meal-field meal-image-field">
       <span class="meal-field-label">Photo</span>
       ${content}
+      <span class="meal-image-loading" hidden><span class="spinner" aria-hidden="true"></span>Envoi…</span>
       <input type="file" class="meal-image-input" data-action="image-input" accept="${ALLOWED_IMAGE_TYPES.join(",")}" hidden />
     </div>`;
 }
 
+/** Replié par défaut (juste le titre) : le contenu (statut, source,
+ * commentaire) ne s'affiche qu'une fois déplié, au clic sur le chevron ou
+ * via "Tout déplier" — voir expandedIds dans mountListView. */
 function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: string): string {
   const statusArea = archived
     ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
@@ -763,6 +791,18 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * worker/index.ts), l'appel HTTP se contentant de confirmer/rejeter
    * l'envoi lui-même. */
   function wireMealImage(card: HTMLLIElement, id: string): void {
+    // Le champ reste inerte pendant l'envoi (le seul retour serait sinon
+    // l'attente réseau elle-même, qui donne l'impression d'un blocage) :
+    // boutons désactivés, aperçu/bouton d'ajout estompés, indicateur visible.
+    function setLoading(loading: boolean): void {
+      card.querySelector(".meal-image-field")?.classList.toggle("is-loading", loading);
+      card.querySelectorAll<HTMLButtonElement>(".meal-image-field button").forEach((btn) => {
+        btn.disabled = loading;
+      });
+      const loadingEl = card.querySelector<HTMLElement>(".meal-image-loading");
+      if (loadingEl) loadingEl.hidden = !loading;
+    }
+
     async function send(file: File | Blob): Promise<void> {
       if (!(ALLOWED_IMAGE_TYPES as readonly string[]).includes(file.type)) {
         showToast("Format d'image non supporté (PNG, JPEG, WebP ou GIF).");
@@ -772,10 +812,13 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         showToast("Image trop volumineuse (5 Mo max).");
         return;
       }
+      setLoading(true);
       try {
         await uploadMealImage(code, id, file);
       } catch (err) {
         showToast(err instanceof ApiError ? err.message : "Erreur réseau, réessaie.");
+      } finally {
+        setLoading(false);
       }
     }
 
@@ -789,14 +832,22 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       input.value = "";
     });
 
+    card.querySelector<HTMLButtonElement>('[data-action="view-image"]')?.addEventListener("click", () => {
+      const img = card.querySelector<HTMLImageElement>(".meal-image-preview img");
+      if (img) openImageLightbox(img.src, img.alt);
+    });
+
     const removeBtn = card.querySelector<HTMLButtonElement>('[data-action="remove-image"]');
     if (removeBtn) {
       wireConfirmClick(removeBtn, {
         armedLabel: "Confirmer la suppression ?",
         onConfirm: () => {
-          deleteMealImage(code, id).catch((err) => {
-            showToast(err instanceof ApiError ? err.message : "Erreur réseau, réessaie.");
-          });
+          setLoading(true);
+          deleteMealImage(code, id)
+            .catch((err) => {
+              showToast(err instanceof ApiError ? err.message : "Erreur réseau, réessaie.");
+            })
+            .finally(() => setLoading(false));
         },
       });
     }

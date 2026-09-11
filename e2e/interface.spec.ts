@@ -400,10 +400,31 @@ test("ajouter une image (upload ou collage) l'affiche, et elle peut être suppri
     buffer: Buffer.from(TINY_PNG_BASE64, "base64"),
   });
 
+  // L'indicateur de chargement apparaît dès l'envoi déclenché (avant même
+  // la réponse réseau) : sans lui, l'attente donne l'impression que rien
+  // ne s'est passé.
+  await expect(page.locator(".meal-image-loading")).toBeVisible();
+
   const img = page.locator(".meal-image-preview img");
   await expect(img).toBeVisible();
   await expect(img).toHaveAttribute("src", /\/image\?v=1$/);
   await expect(page.locator('[data-action="add-image"]')).toHaveCount(0);
+  await expect(page.locator(".meal-image-loading")).toBeHidden();
+
+  // Cliquer sur la miniature l'affiche en plein écran ; Échap referme.
+  await page.click('[data-action="view-image"]');
+  const lightboxImg = page.locator(".image-lightbox-img");
+  await expect(lightboxImg).toBeVisible();
+  await expect(lightboxImg).toHaveAttribute("src", /\/image\?v=1$/);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".image-lightbox-overlay")).toHaveCount(0);
+
+  // Un clic n'importe où sur l'overlay referme aussi (pas seulement le
+  // bouton fermer dédié).
+  await page.click('[data-action="view-image"]');
+  await expect(lightboxImg).toBeVisible();
+  await page.click(".image-lightbox-overlay", { position: { x: 5, y: 5 } });
+  await expect(page.locator(".image-lightbox-overlay")).toHaveCount(0);
 
   // Remplacer par collage (ex : capture d'écran) — événement paste réel
   // plutôt qu'un second upload, pour exercer ce chemin spécifiquement.

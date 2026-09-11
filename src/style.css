@@ -758,6 +758,44 @@ button:focus-visible {
   background: rgba(0, 0, 0, 0.75);
 }
 
+.meal-image-view {
+  display: block;
+  background: none;
+  border: none;
+  padding: 0;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.meal-image-field.is-loading .meal-image-add,
+.meal-image-field.is-loading .meal-image-preview {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.meal-image-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.spinner {
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .placeholder {
   color: var(--text-muted);
 }
@@ -804,6 +842,33 @@ button:focus-visible {
   justify-content: center;
   padding: 1rem;
   z-index: 30;
+}
+
+/* Après .modal-overlay (même spécificité) : doit primer sur son
+   background par défaut, plus clair. */
+.image-lightbox-overlay {
+  background: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+}
+
+.image-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.image-lightbox-close {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  z-index: 31;
+}
+
+.image-lightbox-close:hover {
+  background: rgba(0, 0, 0, 0.75);
 }
 
 .modal {
