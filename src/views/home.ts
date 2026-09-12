@@ -3,6 +3,7 @@ import { getRecentLists, forgetRecentList, touchRecentList } from "../lib/storag
 import { escapeHtml } from "../lib/dom";
 import { icons } from "../lib/icons";
 import { cycleThemePreference, getThemePreference, themeLabel, type ThemePreference } from "../lib/theme";
+import { getA11yPreference, setA11yPreference } from "../lib/a11y";
 import { MAX_LIST_NAME_LENGTH } from "../../shared/types";
 
 const THEME_ICON: Record<ThemePreference, string> = { system: icons.themeAuto, light: icons.sun, dark: icons.moon };
@@ -24,8 +25,12 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
   function render(): void {
     const recents = getRecentLists();
     const theme = getThemePreference();
+    const a11yEnabled = getA11yPreference();
     root.innerHTML = `
       <div class="home">
+        <button type="button" class="icon-btn a11y-toggle" id="a11y-toggle" aria-pressed="${a11yEnabled}" aria-label="Mode accessibilité : ${a11yEnabled ? "activé" : "désactivé"}" title="Mode accessibilité (texte et zones plus grands, contraste renforcé, animations réduites)">
+          ${icons.accessibility}
+        </button>
         <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="Thème : ${themeLabel(theme)}" title="Thème : ${themeLabel(theme)}">
           ${THEME_ICON[theme]}
         </button>
@@ -70,6 +75,11 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
 
     root.querySelector("#theme-toggle")?.addEventListener("click", () => {
       cycleThemePreference();
+      render();
+    });
+
+    root.querySelector("#a11y-toggle")?.addEventListener("click", () => {
+      setA11yPreference(!a11yEnabled);
       render();
     });
 

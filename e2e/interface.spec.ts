@@ -14,6 +14,23 @@ test("le thème choisi persiste après un rechargement", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
+test("le mode accessibilité s'active, persiste après un rechargement, et se désactive", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("html")).not.toHaveAttribute("data-a11y");
+  await expect(page.locator("#a11y-toggle")).toHaveAttribute("aria-pressed", "false");
+
+  await page.click("#a11y-toggle");
+  await expect(page.locator("html")).toHaveAttribute("data-a11y", "");
+  await expect(page.locator("#a11y-toggle")).toHaveAttribute("aria-pressed", "true");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-a11y", "");
+
+  await page.click("#a11y-toggle");
+  await expect(page.locator("html")).not.toHaveAttribute("data-a11y");
+  await expect(page.locator("#a11y-toggle")).toHaveAttribute("aria-pressed", "false");
+});
+
 test("supprimer un repas demande un second clic au même endroit", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");

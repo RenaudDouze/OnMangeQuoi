@@ -45,6 +45,45 @@
   color-scheme: dark;
 }
 
+/* Mode accessibilité (voir src/lib/a11y.ts) : texte et zones cliquables plus
+   grands, contraste renforcé, animations réduites. Le changement de taille
+   de police racine suffit à agrandir la quasi-totalité de l'app (texte,
+   icônes, marges des icon-btn/btn) puisque tout y est déjà exprimé en
+   rem/em plutôt qu'en pixels fixes. */
+:root[data-a11y] {
+  font-size: 118.75%;
+}
+
+:root[data-a11y]:not([data-theme="dark"]) {
+  --text-muted: #4a4038;
+  --border: #a8998a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-a11y]:not([data-theme="light"]) {
+    --text-muted: #d6cabd;
+    --border: #66574a;
+  }
+}
+
+:root[data-a11y][data-theme="dark"] {
+  --text-muted: #d6cabd;
+  --border: #66574a;
+}
+
+[data-a11y] input:focus,
+[data-a11y] select:focus,
+[data-a11y] textarea:focus,
+[data-a11y] button:focus-visible {
+  outline-width: 3px;
+}
+
+[data-a11y] .meal-toggle svg,
+[data-a11y] .spinner {
+  animation: none !important;
+  transition: none !important;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -180,6 +219,18 @@ button:focus-visible {
   top: 1rem;
   right: 1rem;
   font-size: 1.2rem;
+}
+
+.a11y-toggle {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  font-size: 1.2rem;
+}
+
+.a11y-toggle[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--primary-contrast);
 }
 
 .home-header {

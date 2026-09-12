@@ -2,11 +2,13 @@ import "./style.css";
 import { mountHomeView } from "./views/home";
 import { mountListView } from "./views/list";
 import { applyTheme, getThemePreference } from "./lib/theme";
+import { applyA11y, getA11yPreference } from "./lib/a11y";
 import { appPath, routePath } from "./lib/basePath";
 
 // Appliqué avant le premier rendu pour éviter un flash de thème clair suivi
 // d'un bascule sombre si l'utilisateur a choisi un thème manuel.
 applyTheme(getThemePreference());
+applyA11y(getA11yPreference());
 
 const app = document.getElementById("app")!;
 let cleanup: (() => void) | null = null;

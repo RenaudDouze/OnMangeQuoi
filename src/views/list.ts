@@ -509,7 +509,10 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     new Sortable(listEl, {
       handle: ".drag-handle",
       draggable: ".meal-card",
-      animation: 150,
+      // Pas d'animation de repositionnement en mode accessibilité (voir
+      // src/lib/a11y.ts) : SortableJS n'a pas d'option "prefers-reduced-
+      // motion" native, donc on lit directement l'attribut posé sur <html>.
+      animation: document.documentElement.hasAttribute("data-a11y") ? 0 : 150,
       // Gestion du glissé entièrement en JS (souris/tactile) plutôt que le
       // drag-and-drop HTML5 natif : ce dernier ne fonctionne pas au tactile
       // (l'usage principal de cette app, en PWA) et se comporte de façon
