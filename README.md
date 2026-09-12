@@ -23,9 +23,18 @@ de données externe).
   cuisine…) — rendu comme lien cliquable s'il ressemble à une URL.
 - **Commentaires avant / après** : deux champs de commentaire libres par
   repas.
-- **Thème clair/sombre/auto**.
+- **Réordonnancement** : glisser-déposer les repas de la liste active par
+  leur poignée (fusionnée avec le chevron replier/déplier), au doigt comme
+  à la souris.
+- **Image** : une photo (ou une capture d'écran collée directement) par
+  repas, stockée sur R2, affichable en plein écran.
+- **Thème clair/sombre/auto**, et **mode accessibilité** (texte et zones
+  cliquables agrandis, contraste renforcé, animations réduites).
 - **Installable (PWA)** : manifest + service worker, s'ajoute à l'écran
   d'accueil et se relance instantanément (shell mis en cache).
+- **Anti-abus** : limitation de débit par IP (création de liste, lecture/
+  connexion à une liste, upload d'image) — il n'y a pas de compte, donc pas
+  d'autre garde-fou.
 
 ## Confidentialité
 
@@ -37,14 +46,18 @@ personne qui obtient le code peut voir et modifier la liste.
 
 - [Cloudflare Workers](https://developers.cloudflare.com/workers/) +
   [Durable Objects](https://developers.cloudflare.com/durable-objects/)
-  (une instance par liste, stockage + diffusion WebSocket).
+  (une instance par liste, stockage + diffusion WebSocket) +
+  [R2](https://developers.cloudflare.com/r2/) (images des repas) +
+  [Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
+  natif (anti-abus, pas de compte pour authentifier qui que ce soit).
 - [Vite](https://vite.dev/) + [`@cloudflare/vite-plugin`](https://developers.cloudflare.com/workers/vite-plugin/)
   pour un dev loop unique (front + Worker tournent dans le même processus,
   avec `workerd`) + [`vite-plugin-pwa`](https://vite-pwa-org.netlify.app/)
   pour le manifest/service worker.
 - TypeScript, sans framework front (DOM direct) pour rester léger.
 - [`qrcode`](https://www.npmjs.com/package/qrcode) pour générer le QR code de
-  partage côté client.
+  partage côté client, [`sortablejs`](https://sortablejs.github.io/Sortable/)
+  pour le glisser-déposer (souris et tactile) des repas.
 
 ## Démarrer en local
 
@@ -82,6 +95,12 @@ Secrets and variables → Actions → Variables) avec cette URL : elle sert à l
 fois à vérifier le déploiement Cloudflare et à indiquer au build GitHub
 Pages (ci-dessous) où trouver l'API.
 
+R2 doit être activé une première fois sur le compte Cloudflare (dashboard →
+R2 → activer, ce qui demande d'accepter les conditions et d'ajouter un
+moyen de paiement même pour rester dans le palier gratuit) avant le tout
+premier déploiement : le workflow crée ensuite lui-même le bucket des
+images, mais ne peut pas activer R2 à la place du compte.
+
 ## Déployer sur GitHub Pages
 
 L'app est aussi accessible via une URL `github.io`, en plus de l'URL
@@ -106,7 +125,8 @@ shared/            Types partagés entre le Worker et le client
 src/                Application front (vue Accueil / vue Liste)
 e2e/                Tests fonctionnels Playwright (parcours principal, sync
                     temps réel multi-appareils)
-wrangler.json       Configuration Cloudflare (Durable Object, assets SPA)
+wrangler.json       Configuration Cloudflare (Durable Object, assets SPA,
+                    bucket R2, limiteurs de débit)
 ```
 
 ## Qualité et CI/CD
@@ -135,3 +155,9 @@ Les mutations (ajout, changement de statut, note, commentaires…) sont
 envoyées en WebSocket sous forme de petits messages typés
 (`shared/types.ts`), appliquées côté serveur, persistées puis rediffusées à
 tous les clients connectés.
+
+Les images ne sont pas dans ce JSON : elles sont stockées à part, sur R2, une
+par repas (un nouvel envoi remplace la précédente). Un repas ne garde qu'un
+indicateur de présence et un numéro de version ; l'upload/la suppression
+passent par une route HTTP dédiée plutôt que le WebSocket, mais rejoignent
+ensuite le même mécanisme (appliquées puis rediffusées à tous).
