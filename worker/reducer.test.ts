@@ -104,6 +104,12 @@ describe("applyMessage: addMeal", () => {
     expect(state.meals[0].title).toBe("x".repeat(MAX_TITLE_LENGTH));
   });
 
+  it("ignore un id mal formé (personne n'est authentifié pour écrire dans une liste)", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: 'x" onload="alert(1)', title: "A" }, NOW);
+    expect(state.meals).toEqual([]);
+  });
+
   it("ignore l'ajout au-delà de MAX_MEALS_TOTAL repas (actifs + archivés)", () => {
     const state = makeState({
       meals: Array.from({ length: MAX_MEALS_TOTAL }, (_, i) => ({
@@ -241,6 +247,14 @@ describe("applyMessage: setMealStatus", () => {
     expect(state.archive).toEqual([]);
   });
 
+  it("ignore un statut hors de l'enum (personne n'est authentifié pour écrire dans une liste)", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    // @ts-expect-error message forgé volontairement invalide, pour tester la défense côté serveur
+    applyMessage(state, { type: "setMealStatus", id: "m1", status: 'x" onmouseover="alert(1)' }, NOW + 1);
+    expect(state.meals[0].status).toBe("idee");
+  });
+
   it("un doneAt explicite (repas noté après coup) est utilisé à la place de 'now'", () => {
     const state = makeState();
     const chosenDate = NOW - 1000 * 60 * 60 * 24 * 3; // il y a 3 jours
@@ -279,6 +293,14 @@ describe("applyMessage: setMealNote", () => {
     const state = makeState();
     applyMessage(state, { type: "setMealNote", id: "ghost", note: "mouais" }, NOW);
     expect(state.meals).toEqual([]);
+  });
+
+  it("ignore une note hors de l'enum (personne n'est authentifié pour écrire dans une liste)", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    // @ts-expect-error message forgé volontairement invalide, pour tester la défense côté serveur
+    applyMessage(state, { type: "setMealNote", id: "m1", note: 'x" onmouseover="alert(1)' }, NOW + 1);
+    expect(state.meals[0].note).toBeNull();
   });
 });
 
