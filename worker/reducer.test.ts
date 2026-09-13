@@ -308,7 +308,7 @@ describe("applyMessage: setMealImage", () => {
   it("pose une image sur un repas actif et incrémente imageVersion", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 1);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 1, true);
     expect(state.meals[0].hasImage).toBe(true);
     expect(state.meals[0].imageVersion).toBe(1);
     expect(state.meals[0].updatedAt).toBe(NOW + 1);
@@ -317,9 +317,9 @@ describe("applyMessage: setMealImage", () => {
   it("incrémente imageVersion à chaque remplacement, y compris à la suppression", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 1);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 2);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: false }, NOW + 3);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 1, true);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 2, true);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: false }, NOW + 3, true);
     expect(state.meals[0].hasImage).toBe(false);
     expect(state.meals[0].imageVersion).toBe(3);
   });
@@ -328,16 +328,24 @@ describe("applyMessage: setMealImage", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
     applyMessage(state, { type: "setMealStatus", id: "m1", status: "fait" }, NOW + 1);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 2);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 2, true);
     expect(state.archive[0].hasImage).toBe(true);
     expect(state.archive[0].imageVersion).toBe(1);
   });
 
   it("ignore un id inconnu", () => {
     const state = makeState();
-    applyMessage(state, { type: "setMealImage", id: "ghost", hasImage: true }, NOW);
+    applyMessage(state, { type: "setMealImage", id: "ghost", hasImage: true }, NOW, true);
     expect(state.meals).toEqual([]);
     expect(state.archive).toEqual([]);
+  });
+
+  it("ignore un message reçu directement (pas rejoué via la route interne /apply)", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 1);
+    expect(state.meals[0].hasImage).toBe(false);
+    expect(state.meals[0].imageVersion).toBe(0);
   });
 });
 

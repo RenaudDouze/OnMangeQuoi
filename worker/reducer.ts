@@ -38,8 +38,11 @@ function findMeal(state: ListState, id: string): Meal | undefined {
   return state.meals.find((m) => m.id === id) ?? state.archive.find((m) => m.id === id);
 }
 
-/** Mutates `state` in place to apply one client message. */
-export function applyMessage(state: ListState, msg: ClientMessage, now: number = Date.now()): void {
+/** Mutates `state` in place to apply one client message.
+ * `internal` must only be true when the message is replayed by mealRoom.ts's
+ * own "/apply" route (see worker/index.ts), never for a message coming
+ * straight off the public WebSocket — see "setMealImage" below. */
+export function applyMessage(state: ListState, msg: ClientMessage, now: number = Date.now(), internal: boolean = false): void {
   switch (msg.type) {
     case "sync":
       return;
@@ -128,7 +131,15 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
     // worker/index.ts. imageVersion s'incrémente à chaque fois, y compris
     // à la suppression, pour invalider un cache navigateur qui aurait
     // gardé l'URL avec l'ancienne version.
+    //
+    // Rejeté si le message arrive directement du WebSocket public (internal
+    // à false) : sans ce contrôle, n'importe qui ayant le code pourrait
+    // déclarer hasImage=true sans jamais avoir rien envoyé à R2 — la carte
+    // afficherait alors une image cassée pour tout le monde, et le
+    // compteur imageVersion (qui invalide le cache navigateur) dériverait
+    // sans rapport avec de vrais remplacements d'image.
     case "setMealImage": {
+      if (!internal) return;
       const meal = findMeal(state, msg.id);
       if (!meal) return;
       meal.hasImage = msg.hasImage;
