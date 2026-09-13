@@ -776,6 +776,47 @@ button:focus-visible,
   background: #2f9e52;
 }
 
+/* Même motif que .status-picker/.status-pill ci-dessus (pastilles, une
+   valeur au plus sélectionnée). */
+.preptime-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.preptime-pill {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 0.35em 0.8em;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.preptime-pill:hover {
+  background: var(--checked-bg);
+}
+
+.preptime-pill[aria-pressed="true"] {
+  color: #fff;
+  border-color: transparent;
+}
+
+.preptime-pill[data-preptime="rapide"][aria-pressed="true"] {
+  background: #2f9e52;
+}
+
+.preptime-pill[data-preptime="normal"][aria-pressed="true"] {
+  background: #3b6ea5;
+}
+
+.preptime-pill[data-preptime="long"][aria-pressed="true"] {
+  background: #c9822c;
+}
+
 .meal-details {
   display: flex;
   flex-direction: column;

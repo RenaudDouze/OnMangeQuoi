@@ -539,3 +539,90 @@ test("ajouter une image (upload ou collage) l'affiche, et elle peut être suppri
   await expect(page.locator(".meal-image-preview")).toHaveCount(0);
   await expect(page.locator('[data-action="add-image"]')).toBeVisible();
 });
+
+test("le temps de préparation d'un repas se choisit et persiste après rechargement", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await page.click('[data-action="toggle"]');
+
+  await expect(page.locator('.preptime-pill[data-preptime=""]')).toHaveAttribute("aria-pressed", "true");
+  await page.click('.preptime-pill[data-preptime="long"]');
+  await expect(page.locator('.preptime-pill[data-preptime="long"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('.preptime-pill[data-preptime=""]')).toHaveAttribute("aria-pressed", "false");
+
+  await page.reload();
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+  await page.click('[data-action="toggle"]');
+  await expect(page.locator('.preptime-pill[data-preptime="long"]')).toHaveAttribute("aria-pressed", "true");
+});
+
+test("le tri automatique par statut réordonne la liste active, indépendamment de l'ordre manuel", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Un");
+  await page.click("#add-form button[type=submit]");
+  await page.fill("#add-title", "Deux");
+  await page.click("#add-form button[type=submit]");
+  await page.fill("#add-title", "Trois");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText(["Trois", "Deux", "Un"]);
+
+  // "Trois" (tête de liste) passe en "Non complet" : dans MEAL_STATUSES, ce
+  // statut vient après "Idée" (celui de "Deux" et "Un").
+  await page.click('.meal-card:has-text("Trois") [data-action="toggle"]');
+  await page.click('.meal-card:has-text("Trois") .status-pill[data-status="non_complet"]');
+
+  await expect(page.locator("#sort-toggle-btn")).toHaveText("Trier par statut");
+  await page.click("#sort-toggle-btn");
+  await expect(page.locator("#sort-toggle-btn")).toHaveText("Tri manuel");
+  await expect(page.locator("#sort-toggle-btn")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".meal-title")).toHaveText(["Deux", "Un", "Trois"]);
+
+  // Pas de poignée de glissé ni de boutons monter/descendre tant que le tri
+  // automatique est actif : le réordonnancement manuel n'aurait pas de sens.
+  await expect(page.locator(".drag-handle")).toHaveCount(0);
+  await expect(page.locator('[data-action="move-up"]')).toHaveCount(0);
+
+  // Revenir au tri manuel restaure l'ordre manuel d'origine.
+  await page.click("#sort-toggle-btn");
+  await expect(page.locator("#sort-toggle-btn")).toHaveText("Trier par statut");
+  await expect(page.locator(".meal-title")).toHaveText(["Trois", "Deux", "Un"]);
+  await expect(page.locator(".drag-handle")).toHaveCount(3);
+});
+
+test("un toast « Annuler » apparaît après avoir modifié un titre ou un commentaire, et restaure l'ancienne valeur", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+
+  await page.click('[data-action="edit-title"]');
+  await page.fill(".meal-card .inline-edit", "Tartiflette au reblochon");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette au reblochon");
+  await expect(page.locator("#list-toast")).toContainText("Titre modifié.");
+
+  await page.click("#list-toast button");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+
+  // Un commentaire modifié propose aussi d'annuler.
+  await page.click('[data-action="toggle"]');
+  await page.fill('[data-field="comment"]', "Testé une fois, très bon");
+  await page.locator('[data-field="comment"]').blur();
+  await expect(page.locator("#list-toast")).toContainText("Commentaire modifié.");
+
+  await page.click("#list-toast button");
+  await expect(page.locator('[data-field="comment"]')).toHaveValue("");
+});
