@@ -81,6 +81,7 @@ describe("applyMessage: addMeal", () => {
         doneAt: null,
         hasImage: false,
         imageVersion: 0,
+        prepTime: null,
       },
     ]);
   });
@@ -125,6 +126,7 @@ describe("applyMessage: addMeal", () => {
         doneAt: null,
         hasImage: false,
         imageVersion: 0,
+        prepTime: null,
       })),
     });
     applyMessage(state, { type: "addMeal", id: "trop", title: "Un de trop" }, NOW);
@@ -179,6 +181,7 @@ describe("applyMessage: updateMeal", () => {
           doneAt: NOW,
           hasImage: false,
           imageVersion: 0,
+          prepTime: null,
         },
       ],
     });
@@ -301,6 +304,46 @@ describe("applyMessage: setMealNote", () => {
     // @ts-expect-error message forgé volontairement invalide, pour tester la défense côté serveur
     applyMessage(state, { type: "setMealNote", id: "m1", note: 'x" onmouseover="alert(1)' }, NOW + 1);
     expect(state.meals[0].note).toBeNull();
+  });
+});
+
+describe("applyMessage: setMealPrepTime", () => {
+  it("pose un temps de préparation sur un repas actif", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "setMealPrepTime", id: "m1", prepTime: "long" }, NOW + 1);
+    expect(state.meals[0].prepTime).toBe("long");
+    expect(state.meals[0].updatedAt).toBe(NOW + 1);
+  });
+
+  it("pose un temps de préparation sur un repas archivé", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "setMealStatus", id: "m1", status: "fait" }, NOW + 1);
+    applyMessage(state, { type: "setMealPrepTime", id: "m1", prepTime: "rapide" }, NOW + 2);
+    expect(state.archive[0].prepTime).toBe("rapide");
+  });
+
+  it("peut effacer un temps de préparation (null)", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "setMealPrepTime", id: "m1", prepTime: "normal" }, NOW + 1);
+    applyMessage(state, { type: "setMealPrepTime", id: "m1", prepTime: null }, NOW + 2);
+    expect(state.meals[0].prepTime).toBeNull();
+  });
+
+  it("ignore un id inconnu", () => {
+    const state = makeState();
+    applyMessage(state, { type: "setMealPrepTime", id: "ghost", prepTime: "rapide" }, NOW);
+    expect(state.meals).toEqual([]);
+  });
+
+  it("ignore un temps de préparation hors de l'enum (personne n'est authentifié pour écrire dans une liste)", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    // @ts-expect-error message forgé volontairement invalide, pour tester la défense côté serveur
+    applyMessage(state, { type: "setMealPrepTime", id: "m1", prepTime: 'x" onmouseover="alert(1)' }, NOW + 1);
+    expect(state.meals[0].prepTime).toBeNull();
   });
 });
 

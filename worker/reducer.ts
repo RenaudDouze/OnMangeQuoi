@@ -11,6 +11,7 @@ import {
   MAX_MEALS_TOTAL,
   MEAL_STATUSES,
   MEAL_NOTES,
+  PREP_TIMES,
 } from "../shared/types";
 
 // Même forme que l'id généré côté client (crypto.randomUUID(), voir
@@ -74,6 +75,7 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
         doneAt: null,
         hasImage: false,
         imageVersion: 0,
+        prepTime: null,
       };
       state.meals.push(meal);
       return;
@@ -122,6 +124,16 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       const meal = findMeal(state, msg.id);
       if (!meal) return;
       meal.note = msg.note;
+      meal.updatedAt = now;
+      return;
+    }
+
+    case "setMealPrepTime": {
+      // Voir le commentaire dans "setMealStatus" : même risque, même parade.
+      if (msg.prepTime !== null && !(PREP_TIMES as string[]).includes(msg.prepTime)) return;
+      const meal = findMeal(state, msg.id);
+      if (!meal) return;
+      meal.prepTime = msg.prepTime;
       meal.updatedAt = now;
       return;
     }

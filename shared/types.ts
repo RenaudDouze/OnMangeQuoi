@@ -42,6 +42,17 @@ export const MEAL_NOTE_LABELS: Record<MealNote, string> = {
   quand_tu_veux: "😍 Quand tu veux où tu veux",
 };
 
+/** Temps de préparation estimé, purement indicatif (pas de durée précise). */
+export type PrepTime = "rapide" | "normal" | "long";
+
+export const PREP_TIMES: PrepTime[] = ["rapide", "normal", "long"];
+
+export const PREP_TIME_LABELS: Record<PrepTime, string> = {
+  rapide: "⚡ Rapide",
+  normal: "🕐 Normal",
+  long: "🐢 Long",
+};
+
 export interface Meal {
   id: string;
   title: string;
@@ -61,6 +72,8 @@ export interface Meal {
    * navigateur plutôt que de réafficher l'ancienne image. */
   hasImage: boolean;
   imageVersion: number;
+  /** Temps de préparation estimé (rapide/normal/long) ; null si non renseigné. */
+  prepTime: PrepTime | null;
 }
 
 export interface ListState {
@@ -82,6 +95,7 @@ export type ClientMessage =
   | { type: "updateMeal"; id: string; title?: string; source?: string; comment?: string }
   | { type: "setMealStatus"; id: string; status: MealStatus; doneAt?: number }
   | { type: "setMealNote"; id: string; note: MealNote | null }
+  | { type: "setMealPrepTime"; id: string; prepTime: PrepTime | null }
   | { type: "setMealImage"; id: string; hasImage: boolean }
   | { type: "deleteMeal"; id: string }
   | { type: "reorderMeals"; orderedIds: string[] }

@@ -4,6 +4,8 @@ import {
   MEAL_STATUS_LABELS,
   MEAL_NOTES,
   MEAL_NOTE_LABELS,
+  PREP_TIMES,
+  PREP_TIME_LABELS,
   MAX_TITLE_LENGTH,
   MAX_LIST_NAME_LENGTH,
   MAX_SOURCE_LENGTH,
@@ -14,6 +16,7 @@ import {
 import { ListConnection } from "../lib/ws";
 import { ApiError, fetchListState, uploadMealImage, deleteMealImage, mealImageUrl } from "../lib/http";
 import { cacheListState, getCachedListState, touchRecentList } from "../lib/storage";
+import { getSortByStatus, setSortByStatus } from "../lib/sortPreference";
 import { uid } from "../lib/id";
 import { escapeHtml, onActivate, trapFocus } from "../lib/dom";
 import { startEdit } from "../lib/editable";
@@ -63,6 +66,17 @@ function noteVisualPickerHtml(selected: Meal["note"]): string {
     (n) => `<button type="button" class="note-option" data-note="${n}" aria-pressed="${n === selected}">${MEAL_NOTE_LABELS[n]}</button>`,
   ).join("");
   return `<div class="note-picker" id="mark-done-note-picker" role="group" aria-label="Note">${noneBtn}${options}</div>`;
+}
+
+/** Purement indicatif (pas de durée précise) : rapide/normal/long plutôt
+ * qu'un champ libre, pour rester aussi rapide à renseigner que le statut. */
+function prepTimePickerHtml(selected: Meal["prepTime"]): string {
+  const noneBtn = `<button type="button" class="preptime-pill" data-preptime="" aria-pressed="${selected ? "false" : "true"}">Non renseigné</button>`;
+  const options = PREP_TIMES.map(
+    (p) =>
+      `<button type="button" class="preptime-pill" data-preptime="${p}" aria-pressed="${p === selected}">${PREP_TIME_LABELS[p]}</button>`,
+  ).join("");
+  return `<div class="preptime-picker" role="group" aria-label="Temps de préparation">${noneBtn}${options}</div>`;
 }
 
 function formatDate(ts: number): string {
@@ -208,7 +222,15 @@ function mealImageFieldHtml(meal: Meal, code: string): string {
 /** Replié par défaut (juste le titre) : le contenu (statut, source,
  * commentaire) ne s'affiche qu'une fois déplié, au clic sur le chevron ou
  * via "Tout déplier" — voir expandedIds dans mountListView. */
-function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: string, isFirst: boolean, isLast: boolean): string {
+function mealCardHtml(
+  meal: Meal,
+  archived: boolean,
+  expanded: boolean,
+  code: string,
+  isFirst: boolean,
+  isLast: boolean,
+  reorderable: boolean,
+): string {
   const statusArea = archived
     ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
     : statusPickerHtml(meal.status);
@@ -223,12 +245,14 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
 
   // Alternative clavier au glisser-déposer (voir wireMealList/SortableJS,
   // souris/tactile uniquement) : sans ça, un utilisateur clavier n'a aucun
-  // moyen de réordonner la liste active. Jamais sur l'historique, qui n'est
-  // pas réordonnable.
-  const moveButtons = archived
-    ? ""
-    : `<button type="button" class="icon-btn" data-action="move-up" aria-label="Monter dans la liste"${isFirst ? " disabled" : ""}>${icons.arrowUp}</button>
-       <button type="button" class="icon-btn" data-action="move-down" aria-label="Descendre dans la liste"${isLast ? " disabled" : ""}>${icons.arrowDown}</button>`;
+  // moyen de réordonner la liste active. Ni sur l'historique (jamais
+  // réordonnable), ni quand le tri automatique par statut est actif (voir
+  // sortByStatus) : l'ordre n'y est alors plus manuel, le réordonnancement
+  // n'aurait pas de sens tant qu'il reste actif.
+  const moveButtons = reorderable
+    ? `<button type="button" class="icon-btn" data-action="move-up" aria-label="Monter dans la liste"${isFirst ? " disabled" : ""}>${icons.arrowUp}</button>
+       <button type="button" class="icon-btn" data-action="move-down" aria-label="Descendre dans la liste"${isLast ? " disabled" : ""}>${icons.arrowDown}</button>`
+    : "";
 
   // Le bouton supprimer vit dans le contenu déplié plutôt que sur la ligne
   // du titre (voir .meal-main) : son apparition/disparition au dépli n'y
@@ -245,6 +269,10 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
         <div class="meal-field">
           <span class="meal-field-label">Source</span>
           <div class="meal-source" data-action="edit-source" role="button" tabindex="0">${sourceHtml(meal.source)}</div>
+        </div>
+        <div class="meal-field">
+          <span class="meal-field-label">Temps de préparation</span>
+          ${prepTimePickerHtml(meal.prepTime)}
         </div>
         <div class="meal-field">
           <label class="meal-field-label" for="meal-comment-${escapeHtml(meal.id)}">Commentaire</label>
@@ -278,7 +306,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
   // avec déplacement, donc pas d'ambiguïté entre les deux gestes — et un
   // seul élément plutôt que deux économise de la place sur la ligne
   // repliée. Sur l'historique (jamais réordonnable), c'est un bouton simple.
-  const toggleBtn = `<button type="button" class="icon-btn meal-toggle${archived ? "" : " drag-handle"}" data-action="toggle" aria-expanded="${expanded}" aria-label="${expanded ? "Réduire" : "Déplier"}"${archived ? "" : ` title="Glisser pour réordonner"`}>${archived ? icons.chevronDown : icons.grip}</button>`;
+  const toggleBtn = `<button type="button" class="icon-btn meal-toggle${reorderable ? " drag-handle" : ""}" data-action="toggle" aria-expanded="${expanded}" aria-label="${expanded ? "Réduire" : "Déplier"}"${reorderable ? ` title="Glisser pour réordonner"` : ""}>${reorderable ? icons.grip : icons.chevronDown}</button>`;
 
   return `
     <li class="meal-card${archived ? " archived" : ""}${expanded ? " expanded" : ""}" data-id="${escapeHtml(meal.id)}"${colorAttr}>
@@ -306,6 +334,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <button type="button" class="icon-btn" id="btn-home" aria-label="Retour à l'accueil">${icons.back}</button>
         <h1 id="list-title" role="button" tabindex="0">${escapeHtml(state.name)}</h1>
         <span class="conn-dot" id="conn-dot" title="${connected ? "Synchronisé" : "Connexion…"}"></span>
+        <button type="button" class="btn-link" id="sort-toggle-btn" aria-pressed="false">Trier par statut</button>
         <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
         <button type="button" class="icon-btn" id="btn-share" aria-label="Partager">${icons.share}</button>
       </header>
@@ -351,6 +380,12 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   let shellMounted = false;
   let tab: "active" | "archive" = "active";
   let archiveQuery = "";
+  // Préférence propre à cet appareil (voir src/lib/sortPreference.ts) : trie
+  // la liste active par statut plutôt que par ordre manuel. Le glisser-
+  // déposer et les boutons monter/descendre (voir wireMealList/moveMeal)
+  // n'ont alors plus de sens et sont masqués tant qu'elle reste active.
+  let sortByStatus = getSortByStatus();
+  let sortable: Sortable | null = null;
   // Le temps d'un glissé (voir wireMealList) : évite qu'une mise à jour
   // reçue en direct ne reconstruise la liste sous les doigts de la personne
   // en train de réordonner. Le prochain envoi (celui du dépôt) redéclenche
@@ -484,12 +519,19 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     if (titleEl) {
       onActivate(titleEl, () => {
         if (!state) return;
+        const previousName = state.name;
         startEdit(titleEl, {
           value: state.name,
           maxLength: MAX_LIST_NAME_LENGTH,
           onCommit: (value) => {
-            if (value && state) conn.send({ type: "renameList", name: value });
-            else render();
+            if (!value) {
+              render();
+              return;
+            }
+            conn.send({ type: "renameList", name: value });
+            if (value !== previousName) {
+              showUndoToast("Nom de la liste modifié.", () => conn.send({ type: "renameList", name: previousName }));
+            }
           },
         });
       });
@@ -505,9 +547,21 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         if (addCard) addCard.hidden = tab !== "active";
         const searchCard = root.querySelector("#search-card") as HTMLElement | null;
         if (searchCard) searchCard.hidden = tab !== "archive";
+        updateSortToggleBtn();
         renderMeals();
       });
     });
+  }
+
+  /** Le tri automatique par statut (voir sortByStatus) n'a de sens que sur la
+   * liste active : masqué sur l'historique, dont l'ordre suit toujours la
+   * date d'archivage. */
+  function updateSortToggleBtn(): void {
+    const btn = root.querySelector("#sort-toggle-btn") as HTMLButtonElement | null;
+    if (!btn) return;
+    btn.hidden = tab !== "active";
+    btn.setAttribute("aria-pressed", String(sortByStatus));
+    btn.textContent = sortByStatus ? "Tri manuel" : "Trier par statut";
   }
 
   function wireSearch(): void {
@@ -527,6 +581,15 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       }
       renderMeals();
     });
+
+    root.querySelector("#sort-toggle-btn")?.addEventListener("click", () => {
+      sortByStatus = !sortByStatus;
+      setSortByStatus(sortByStatus);
+      updateSortToggleBtn();
+      sortable?.option("disabled", sortByStatus);
+      renderMeals();
+    });
+    updateSortToggleBtn();
   }
 
   /** Réordonner la liste active à la main : glisser une carte par sa
@@ -545,10 +608,14 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     // vérifie les deux nous-mêmes.
     const reduceMotion =
       document.documentElement.hasAttribute("data-a11y") || matchMedia("(prefers-reduced-motion: reduce)").matches;
-    new Sortable(listEl, {
+    sortable = new Sortable(listEl, {
       handle: ".drag-handle",
       draggable: ".meal-card",
       animation: reduceMotion ? 0 : 150,
+      // Glisser une carte n'a plus de sens tant que le tri automatique par
+      // statut est actif (voir sortByStatus/wireToolbar) : l'ordre y est
+      // recalculé à chaque rendu, un glissé serait aussitôt défait.
+      disabled: sortByStatus,
       // Gestion du glissé entièrement en JS (souris/tactile) plutôt que le
       // drag-and-drop HTML5 natif : ce dernier ne fonctionne pas au tactile
       // (l'usage principal de cette app, en PWA) et se comporte de façon
@@ -661,15 +728,18 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
 
   /** Repas actuellement affichés (onglet + recherche), dans l'ordre affiché
    * — partagé entre le rendu et "Tout déplier" pour qu'ils portent sur
-   * exactement les mêmes repas. */
+   * exactement les mêmes repas. Sur la liste active, soit l'ordre manuel
+   * (glisser-déposer / boutons monter-descendre), soit un tri automatique
+   * par statut (voir sortByStatus) — au choix, jamais les deux à la fois. */
   function visibleMeals(): Meal[] {
     if (!state) return [];
     const query = archiveQuery.trim().toLowerCase();
-    return tab === "active"
-      ? [...state.meals].sort((a, b) => a.order - b.order)
-      : query
-        ? state.archive.filter((m) => m.title.toLowerCase().includes(query))
-        : state.archive;
+    if (tab !== "active") {
+      return query ? state.archive.filter((m) => m.title.toLowerCase().includes(query)) : state.archive;
+    }
+    return sortByStatus
+      ? [...state.meals].sort((a, b) => MEAL_STATUSES.indexOf(a.status) - MEAL_STATUSES.indexOf(b.status) || a.order - b.order)
+      : [...state.meals].sort((a, b) => a.order - b.order);
   }
 
   function renderMeals(): void {
@@ -734,18 +804,22 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (li.dataset.id) existingById.set(li.dataset.id, li);
     });
 
+    const reorderable = tab === "active" && !sortByStatus;
     const cards = meals.map((meal, index) => {
       const existing = existingById.get(meal.id);
       const expanded = expandedIds.has(meal.id);
       // isFirst/isLast déterminent l'état désactivé des boutons monter/
       // descendre (voir mealCardHtml) : ça dépend de la position, pas
       // seulement du contenu du repas, donc ça doit aussi faire partie de la
-      // clé qui décide si la carte doit être régénérée.
-      const isFirst = tab === "active" && index === 0;
-      const isLast = tab === "active" && index === meals.length - 1;
-      const rev = `${meal.updatedAt}:${expanded}:${isFirst}:${isLast}`;
+      // clé qui décide si la carte doit être régénérée. reorderable est
+      // inclus séparément : quand il change, une carte du milieu de la
+      // liste (ni première ni dernière) doit quand même être régénérée pour
+      // afficher/masquer sa poignée de glissé.
+      const isFirst = reorderable && index === 0;
+      const isLast = reorderable && index === meals.length - 1;
+      const rev = `${meal.updatedAt}:${expanded}:${isFirst}:${isLast}:${reorderable}`;
       if (existing && (meal.id === frozenId || existing.dataset.rev === rev)) return existing;
-      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expanded, code, isFirst, isLast));
+      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expanded, code, isFirst, isLast, reorderable));
       card.dataset.rev = rev;
       wireMealCard(card, meal);
       return card;
@@ -783,12 +857,19 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     const titleEl = card.querySelector<HTMLElement>('[data-action="edit-title"]');
     if (titleEl) {
       onActivate(titleEl, () => {
+        const previousTitle = meal.title;
         startEdit(titleEl, {
           value: meal.title,
           maxLength: MAX_TITLE_LENGTH,
           onCommit: (value) => {
-            if (value) conn.send({ type: "updateMeal", id, title: value });
-            else render();
+            if (!value) {
+              render();
+              return;
+            }
+            conn.send({ type: "updateMeal", id, title: value });
+            if (value !== previousTitle) {
+              showUndoToast("Titre modifié.", () => conn.send({ type: "updateMeal", id, title: previousTitle }));
+            }
           },
         });
       });
@@ -797,17 +878,32 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     const sourceEl = card.querySelector<HTMLElement>('[data-action="edit-source"]');
     if (sourceEl) {
       onActivate(sourceEl, () => {
+        const previousSource = meal.source;
         startEdit(sourceEl, {
           value: meal.source,
           placeholder: "Lien ou texte libre",
           maxLength: MAX_SOURCE_LENGTH,
-          onCommit: (value) => conn.send({ type: "updateMeal", id, source: value }),
+          onCommit: (value) => {
+            conn.send({ type: "updateMeal", id, source: value });
+            if (value !== previousSource) {
+              showUndoToast("Source modifiée.", () => conn.send({ type: "updateMeal", id, source: previousSource }));
+            }
+          },
         });
       });
     }
 
     card.querySelector<HTMLButtonElement>('[data-action="move-up"]')?.addEventListener("click", () => moveMeal(id, -1));
     card.querySelector<HTMLButtonElement>('[data-action="move-down"]')?.addEventListener("click", () => moveMeal(id, 1));
+
+    card.querySelectorAll<HTMLButtonElement>(".preptime-pill").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const value = btn.dataset.preptime;
+        const prepTime = value ? (value as Meal["prepTime"]) : null;
+        if (prepTime === meal.prepTime) return;
+        conn.send({ type: "setMealPrepTime", id, prepTime });
+      });
+    });
 
     card.querySelectorAll<HTMLButtonElement>(".status-pill").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -832,8 +928,20 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       });
     });
 
+    // Suit la dernière valeur effectivement envoyée plutôt que meal.comment
+    // (figé au moment du rendu) : sans ça, plusieurs éditions successives
+    // avant qu'un nouvel état ne revienne du serveur proposeraient toutes la
+    // même valeur d'origine pour "Annuler", au lieu de celle juste avant
+    // chacune d'elles.
+    let previousComment = meal.comment;
     card.querySelector<HTMLTextAreaElement>('[data-field="comment"]')?.addEventListener("blur", (e) => {
-      conn.send({ type: "updateMeal", id, comment: (e.target as HTMLTextAreaElement).value });
+      const value = (e.target as HTMLTextAreaElement).value;
+      conn.send({ type: "updateMeal", id, comment: value });
+      if (value !== previousComment) {
+        const restored = previousComment;
+        showUndoToast("Commentaire modifié.", () => conn.send({ type: "updateMeal", id, comment: restored }));
+        previousComment = value;
+      }
     });
 
     const deleteBtn = card.querySelector<HTMLButtonElement>('[data-action="delete"]');
