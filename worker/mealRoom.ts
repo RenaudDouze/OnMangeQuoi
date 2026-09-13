@@ -49,7 +49,7 @@ export class MealRoom extends DurableObject<Env> {
       } catch {
         return Response.json({ error: "bad request" }, { status: 400 });
       }
-      await this.applyAndBroadcast(msg);
+      await this.applyAndBroadcast(msg, true);
       return Response.json(this.listState);
     }
 
@@ -104,8 +104,10 @@ export class MealRoom extends DurableObject<Env> {
 
   async webSocketError(_ws: WebSocket): Promise<void> {}
 
-  private async applyAndBroadcast(msg: ClientMessage): Promise<void> {
-    applyMessage(this.listState!, msg);
+  /** `internal` : uniquement à true pour un message rejoué via la route
+   * "/apply" ci-dessus — voir la doc de applyMessage. */
+  private async applyAndBroadcast(msg: ClientMessage, internal: boolean = false): Promise<void> {
+    applyMessage(this.listState!, msg, Date.now(), internal);
     await this.persist();
     this.broadcast();
   }
