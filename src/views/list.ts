@@ -666,11 +666,18 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     return card && listEl.contains(card) ? (card.dataset.id ?? null) : null;
   }
 
-  /** Reconstruit la liste sans jamais régénérer la carte en cours d'édition :
-   * comme il n'y a pas de mise à jour optimiste locale (voir ListConnection),
-   * une mise à jour temps réel reçue pendant qu'on tape effacerait sinon la
-   * saisie non encore validée (le nœud DOM de l'input/textarea serait détruit
-   * et recréé avec l'ancienne valeur venue du serveur). */
+  /** Reconstruit la liste en réutilisant chaque carte dont le contenu affiché
+   * n'a pas changé, plutôt que de tout régénérer à chaque état reçu : une
+   * mise à jour temps réel ne modifie en général qu'un seul repas, inutile
+   * de détruire/recréer (HTML + ré-attachement des écouteurs) toutes les
+   * autres. Le repas garde `updatedAt` à jour à chaque mutation du reducer
+   * (sauf reorderMeals, qui ne change pas le contenu affiché d'une carte) :
+   * combiné à l'état déplié/replié (propre au client, pas au repas), ça
+   * suffit à savoir si une carte doit être régénérée. La carte en cours
+   * d'édition (`frozenId`) reste elle un cas à part : il ne faut jamais
+   * l'écraser, même si `updatedAt` a changé, sous peine d'effacer une saisie
+   * non encore validée (le nœud DOM de l'input/textarea serait détruit et
+   * recréé avec l'ancienne valeur venue du serveur). */
   function reconcileMealList(listEl: HTMLElement, meals: Meal[]): void {
     const frozenId = focusedMealId(listEl);
     const existingById = new Map<string, HTMLLIElement>();
@@ -679,9 +686,12 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     });
 
     const cards = meals.map((meal) => {
-      const existing = meal.id === frozenId ? existingById.get(meal.id) : undefined;
-      if (existing) return existing;
-      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expandedIds.has(meal.id), code));
+      const existing = existingById.get(meal.id);
+      const expanded = expandedIds.has(meal.id);
+      const rev = `${meal.updatedAt}:${expanded}`;
+      if (existing && (meal.id === frozenId || existing.dataset.rev === rev)) return existing;
+      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expanded, code));
+      card.dataset.rev = rev;
       wireMealCard(card, meal);
       return card;
     });
