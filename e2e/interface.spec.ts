@@ -14,6 +14,22 @@ test("le thème choisi persiste après un rechargement", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
+test("le mode « réduire les animations » du système désactive les animations sans passer par le bouton dédié de l'app", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+  await expect(page.locator("html")).not.toHaveAttribute("data-a11y");
+
+  const transition = await page.locator(".meal-toggle svg").evaluate((el) => getComputedStyle(el).transitionDuration);
+  expect(transition).toBe("0s");
+});
+
 test("le mode accessibilité s'active, persiste après un rechargement, et se désactive", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("html")).not.toHaveAttribute("data-a11y");
@@ -107,6 +123,45 @@ test("glisser une carte par sa poignée réordonne la liste active", async ({ pa
   await expect(page.locator(".meal-title")).toHaveText(["Curry de légumes", "Soupe de légumes", "Tartiflette"]);
 });
 
+test("les boutons monter/descendre réordonnent la liste active, alternative clavier au glisser-déposer", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await page.fill("#add-title", "Curry de légumes");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText(["Curry de légumes", "Tartiflette"]);
+
+  // Premier repas de la liste : "monter" est désactivé (rien au-dessus).
+  await expect(page.locator(".meal-card").nth(0).locator('[data-action="move-up"]')).toBeDisabled();
+  // Dernier repas : "descendre" est désactivé.
+  await expect(page.locator(".meal-card").nth(1).locator('[data-action="move-down"]')).toBeDisabled();
+
+  await page.locator(".meal-card").nth(0).locator('[data-action="move-down"]').click();
+  await expect(page.locator(".meal-title")).toHaveText(["Tartiflette", "Curry de légumes"]);
+});
+
+test("le titre d'un repas est éditable au clavier (Entrée), pas seulement au clic", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+
+  // role="button" + tabindex="0" sans activation clavier serait un piège :
+  // focusable mais inutilisable sans souris (voir onActivate).
+  await page.locator('[data-action="edit-title"]').focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".meal-card .inline-edit")).toBeVisible();
+  await page.keyboard.press("Escape");
+});
+
 test("le titre de la liste est modifiable en ligne, et persiste après rechargement", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
@@ -136,6 +191,27 @@ test("l'onglet Historique affiche un message quand il est vide", async ({ page }
   await page.click('.tab-btn[data-tab="archive"]');
   await expect(page.locator(".empty-message")).toContainText("Aucun repas dans l'historique");
   await expect(page.locator("#add-meal-card")).toBeHidden();
+});
+
+test("fermer la modale « Fait » (Échap) rend le focus au bouton qui l'a ouverte", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await page.click('[data-action="toggle"]');
+
+  const faitBtn = page.locator('.status-pill[data-status="fait"]');
+  await faitBtn.click();
+  await expect(page.locator(".modal")).toBeVisible();
+
+  // Sans restitution explicite du focus, il retomberait sur <body> — un
+  // utilisateur clavier/lecteur d'écran perdrait sa position dans la liste.
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".modal")).toBeHidden();
+  await expect(faitBtn).toBeFocused();
 });
 
 test("annuler la modale « Fait » ne change ni le statut ni la note/commentaire", async ({ page }) => {

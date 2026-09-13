@@ -56,6 +56,7 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
         <section class="card">
           <h2>Nouvelle liste de repas</h2>
           <form id="create-form" class="row">
+            <label class="sr-only" for="create-name">Nom de la liste (optionnel)</label>
             <input id="create-name" type="text" placeholder="Nom de la liste (optionnel)" maxlength="${MAX_LIST_NAME_LENGTH}" />
             <button type="submit" class="btn primary">Créer</button>
           </form>
@@ -65,6 +66,7 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
         <section class="card">
           <h2>Rejoindre une liste</h2>
           <form id="join-form" class="row">
+            <label class="sr-only" for="join-code">Code à 6 caractères</label>
             <input id="join-code" type="text" placeholder="Code à 6 caractères" maxlength="10" autocapitalize="characters" />
             <button type="submit" class="btn">Rejoindre</button>
           </form>

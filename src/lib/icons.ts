@@ -30,6 +30,10 @@ export const icons = {
     '<path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11 5"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07L13 19"/>',
   ),
   chevronDown: svg('<path d="m6 9 6 6 6-6"/>'),
+  // Alternative clavier au glisser-déposer (voir wireMealList/SortableJS,
+  // qui ne gère que souris/tactile) : monter/descendre un repas d'un cran.
+  arrowUp: svg('<path d="M12 19V5M5 12l7-7 7 7"/>'),
+  arrowDown: svg('<path d="M12 5v14M19 12l-7 7-7-7"/>'),
   image: svg(
     '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
   ),
