@@ -15,7 +15,7 @@ import { ListConnection } from "../lib/ws";
 import { ApiError, fetchListState, uploadMealImage, deleteMealImage, mealImageUrl } from "../lib/http";
 import { cacheListState, getCachedListState, touchRecentList } from "../lib/storage";
 import { uid } from "../lib/id";
-import { escapeHtml } from "../lib/dom";
+import { escapeHtml, onActivate, trapFocus } from "../lib/dom";
 import { startEdit } from "../lib/editable";
 import { wireConfirmClick } from "../lib/confirmClick";
 import { icons } from "../lib/icons";
@@ -90,6 +90,7 @@ function fromDateInputValue(value: string): number {
  * pour noter comment c'était, plutôt qu'une étape séparée à ne pas oublier
  * une fois le repas déjà dans l'historique. */
 function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: string, doneAt: number) => void): void {
+  const triggerEl = document.activeElement;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
@@ -115,10 +116,12 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  const untrap = trapFocus(overlay, triggerEl);
 
   const close = () => {
     overlay.remove();
     document.removeEventListener("keydown", onKeydown);
+    untrap();
   };
   function onKeydown(e: KeyboardEvent): void {
     if (e.key === "Escape") close();
@@ -152,16 +155,23 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
  * sombre, fermeture au clic n'importe où dessus, sur Échap, ou sur le
  * bouton fermer — même mécanique que openMarkDoneModal. */
 function openImageLightbox(url: string, alt: string): void {
+  const triggerEl = document.activeElement;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay image-lightbox-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", alt);
   overlay.innerHTML = `
     <button type="button" class="icon-btn image-lightbox-close" aria-label="Fermer">${icons.close}</button>
     <img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" class="image-lightbox-img" />`;
   document.body.appendChild(overlay);
+  overlay.querySelector<HTMLButtonElement>(".image-lightbox-close")?.focus();
+  const untrap = trapFocus(overlay, triggerEl);
 
   const close = () => {
     overlay.remove();
     document.removeEventListener("keydown", onKeydown);
+    untrap();
   };
   function onKeydown(e: KeyboardEvent): void {
     if (e.key === "Escape") close();
@@ -198,7 +208,7 @@ function mealImageFieldHtml(meal: Meal, code: string): string {
 /** Replié par défaut (juste le titre) : le contenu (statut, source,
  * commentaire) ne s'affiche qu'une fois déplié, au clic sur le chevron ou
  * via "Tout déplier" — voir expandedIds dans mountListView. */
-function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: string): string {
+function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: string, isFirst: boolean, isLast: boolean): string {
   const statusArea = archived
     ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
     : statusPickerHtml(meal.status);
@@ -210,6 +220,15 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
   const restoreBtn = archived
     ? `<button type="button" class="icon-btn" data-action="restore" aria-label="Remettre dans la liste" title="Remettre dans la liste">${icons.undo}</button>`
     : "";
+
+  // Alternative clavier au glisser-déposer (voir wireMealList/SortableJS,
+  // souris/tactile uniquement) : sans ça, un utilisateur clavier n'a aucun
+  // moyen de réordonner la liste active. Jamais sur l'historique, qui n'est
+  // pas réordonnable.
+  const moveButtons = archived
+    ? ""
+    : `<button type="button" class="icon-btn" data-action="move-up" aria-label="Monter dans la liste"${isFirst ? " disabled" : ""}>${icons.arrowUp}</button>
+       <button type="button" class="icon-btn" data-action="move-down" aria-label="Descendre dans la liste"${isLast ? " disabled" : ""}>${icons.arrowDown}</button>`;
 
   // Le bouton supprimer vit dans le contenu déplié plutôt que sur la ligne
   // du titre (voir .meal-main) : son apparition/disparition au dépli n'y
@@ -225,11 +244,11 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
       <div class="meal-details">
         <div class="meal-field">
           <span class="meal-field-label">Source</span>
-          <div class="meal-source" data-action="edit-source" tabindex="0">${sourceHtml(meal.source)}</div>
+          <div class="meal-source" data-action="edit-source" role="button" tabindex="0">${sourceHtml(meal.source)}</div>
         </div>
         <div class="meal-field">
-          <span class="meal-field-label">Commentaire</span>
-          <textarea class="meal-comment" data-field="comment" placeholder="Une note sur ce repas…" rows="2" maxlength="${MAX_COMMENT_LENGTH}">${escapeHtml(meal.comment)}</textarea>
+          <label class="meal-field-label" for="meal-comment-${escapeHtml(meal.id)}">Commentaire</label>
+          <textarea id="meal-comment-${escapeHtml(meal.id)}" class="meal-comment" data-field="comment" placeholder="Une note sur ce repas…" rows="2" maxlength="${MAX_COMMENT_LENGTH}">${escapeHtml(meal.comment)}</textarea>
         </div>
         ${mealImageFieldHtml(meal, code)}
         <div class="meal-details-actions">${deleteBtn}</div>
@@ -265,8 +284,8 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
     <li class="meal-card${archived ? " archived" : ""}${expanded ? " expanded" : ""}" data-id="${escapeHtml(meal.id)}"${colorAttr}>
       <div class="meal-main" data-action="toggle-row">
         ${toggleBtn}
-        <h3 class="meal-title" data-action="edit-title" tabindex="0">${escapeHtml(meal.title)}</h3>
-        <div class="meal-controls">${restoreBtn}</div>
+        <h3 class="meal-title" data-action="edit-title" role="button" tabindex="0">${escapeHtml(meal.title)}</h3>
+        <div class="meal-controls">${restoreBtn}${moveButtons}</div>
       </div>
       ${details}
     </li>`;
@@ -285,7 +304,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
     <div class="list-view">
       <header class="list-header">
         <button type="button" class="icon-btn" id="btn-home" aria-label="Retour à l'accueil">${icons.back}</button>
-        <h1 id="list-title" tabindex="0">${escapeHtml(state.name)}</h1>
+        <h1 id="list-title" role="button" tabindex="0">${escapeHtml(state.name)}</h1>
         <span class="conn-dot" id="conn-dot" title="${connected ? "Synchronisé" : "Connexion…"}"></span>
         <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
         <button type="button" class="icon-btn" id="btn-share" aria-label="Partager">${icons.share}</button>
@@ -304,6 +323,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
 
       <section class="card add-meal-card" id="add-meal-card">
         <form id="add-form" class="row">
+          <label class="sr-only" for="add-title">Nom du repas</label>
           <input id="add-title" type="text" placeholder="Nom du repas" maxlength="${MAX_TITLE_LENGTH}" autocomplete="off" />
           <button type="submit" class="btn primary">${icons.plus} Ajouter</button>
         </form>
@@ -311,6 +331,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
       </section>
 
       <section class="card search-card" id="search-card" hidden>
+        <label class="sr-only" for="archive-search">Rechercher dans l'historique</label>
         <input id="archive-search" type="search" placeholder="Rechercher dans l'historique…" autocomplete="off" />
       </section>
 
@@ -460,17 +481,19 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     }
 
     const titleEl = root.querySelector("#list-title") as HTMLElement | null;
-    titleEl?.addEventListener("click", () => {
-      if (!state) return;
-      startEdit(titleEl, {
-        value: state.name,
-        maxLength: MAX_LIST_NAME_LENGTH,
-        onCommit: (value) => {
-          if (value && state) conn.send({ type: "renameList", name: value });
-          else render();
-        },
+    if (titleEl) {
+      onActivate(titleEl, () => {
+        if (!state) return;
+        startEdit(titleEl, {
+          value: state.name,
+          maxLength: MAX_LIST_NAME_LENGTH,
+          onCommit: (value) => {
+            if (value && state) conn.send({ type: "renameList", name: value });
+            else render();
+          },
+        });
       });
-    });
+    }
   }
 
   function wireTabs(): void {
@@ -516,13 +539,16 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   function wireMealList(): void {
     const listEl = root.querySelector("#meal-list") as HTMLElement | null;
     if (!listEl) return;
+    // Pas d'animation de repositionnement en mode accessibilité (voir
+    // src/lib/a11y.ts) ni si le système demande de réduire les animations :
+    // SortableJS n'a pas d'option "prefers-reduced-motion" native, donc on
+    // vérifie les deux nous-mêmes.
+    const reduceMotion =
+      document.documentElement.hasAttribute("data-a11y") || matchMedia("(prefers-reduced-motion: reduce)").matches;
     new Sortable(listEl, {
       handle: ".drag-handle",
       draggable: ".meal-card",
-      // Pas d'animation de repositionnement en mode accessibilité (voir
-      // src/lib/a11y.ts) : SortableJS n'a pas d'option "prefers-reduced-
-      // motion" native, donc on lit directement l'attribut posé sur <html>.
-      animation: document.documentElement.hasAttribute("data-a11y") ? 0 : 150,
+      animation: reduceMotion ? 0 : 150,
       // Gestion du glissé entièrement en JS (souris/tactile) plutôt que le
       // drag-and-drop HTML5 natif : ce dernier ne fonctionne pas au tactile
       // (l'usage principal de cette app, en PWA) et se comporte de façon
@@ -620,6 +646,19 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     );
   }
 
+  /** Alternative clavier au glisser-déposer (voir wireMealList) : échange le
+   * repas `id` avec son voisin immédiat dans la liste active affichée, puis
+   * envoie le même message "reorderMeals" que le dépôt d'un glissé — aucune
+   * différence côté serveur entre les deux façons de réordonner. */
+  function moveMeal(id: string, delta: number): void {
+    const ids = visibleMeals().map((m) => m.id);
+    const idx = ids.indexOf(id);
+    const target = idx + delta;
+    if (idx === -1 || target < 0 || target >= ids.length) return;
+    [ids[idx], ids[target]] = [ids[target], ids[idx]];
+    conn.send({ type: "reorderMeals", orderedIds: ids });
+  }
+
   /** Repas actuellement affichés (onglet + recherche), dans l'ordre affiché
    * — partagé entre le rendu et "Tout déplier" pour qu'ils portent sur
    * exactement les mêmes repas. */
@@ -695,12 +734,18 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (li.dataset.id) existingById.set(li.dataset.id, li);
     });
 
-    const cards = meals.map((meal) => {
+    const cards = meals.map((meal, index) => {
       const existing = existingById.get(meal.id);
       const expanded = expandedIds.has(meal.id);
-      const rev = `${meal.updatedAt}:${expanded}`;
+      // isFirst/isLast déterminent l'état désactivé des boutons monter/
+      // descendre (voir mealCardHtml) : ça dépend de la position, pas
+      // seulement du contenu du repas, donc ça doit aussi faire partie de la
+      // clé qui décide si la carte doit être régénérée.
+      const isFirst = tab === "active" && index === 0;
+      const isLast = tab === "active" && index === meals.length - 1;
+      const rev = `${meal.updatedAt}:${expanded}:${isFirst}:${isLast}`;
       if (existing && (meal.id === frozenId || existing.dataset.rev === rev)) return existing;
-      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expanded, code));
+      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expanded, code, isFirst, isLast));
       card.dataset.rev = rev;
       wireMealCard(card, meal);
       return card;
@@ -736,26 +781,33 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     });
 
     const titleEl = card.querySelector<HTMLElement>('[data-action="edit-title"]');
-    titleEl?.addEventListener("click", () => {
-      startEdit(titleEl, {
-        value: meal.title,
-        maxLength: MAX_TITLE_LENGTH,
-        onCommit: (value) => {
-          if (value) conn.send({ type: "updateMeal", id, title: value });
-          else render();
-        },
+    if (titleEl) {
+      onActivate(titleEl, () => {
+        startEdit(titleEl, {
+          value: meal.title,
+          maxLength: MAX_TITLE_LENGTH,
+          onCommit: (value) => {
+            if (value) conn.send({ type: "updateMeal", id, title: value });
+            else render();
+          },
+        });
       });
-    });
+    }
 
     const sourceEl = card.querySelector<HTMLElement>('[data-action="edit-source"]');
-    sourceEl?.addEventListener("click", () => {
-      startEdit(sourceEl, {
-        value: meal.source,
-        placeholder: "Lien ou texte libre",
-        maxLength: MAX_SOURCE_LENGTH,
-        onCommit: (value) => conn.send({ type: "updateMeal", id, source: value }),
+    if (sourceEl) {
+      onActivate(sourceEl, () => {
+        startEdit(sourceEl, {
+          value: meal.source,
+          placeholder: "Lien ou texte libre",
+          maxLength: MAX_SOURCE_LENGTH,
+          onCommit: (value) => conn.send({ type: "updateMeal", id, source: value }),
+        });
       });
-    });
+    }
+
+    card.querySelector<HTMLButtonElement>('[data-action="move-up"]')?.addEventListener("click", () => moveMeal(id, -1));
+    card.querySelector<HTMLButtonElement>('[data-action="move-down"]')?.addEventListener("click", () => moveMeal(id, 1));
 
     card.querySelectorAll<HTMLButtonElement>(".status-pill").forEach((btn) => {
       btn.addEventListener("click", () => {
