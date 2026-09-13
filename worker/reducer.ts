@@ -3,7 +3,26 @@
 // Workers runtime (storage, WebSockets, ctx...).
 
 import type { ListState, ClientMessage, Meal } from "../shared/types";
-import { MAX_TITLE_LENGTH, MAX_LIST_NAME_LENGTH, MAX_SOURCE_LENGTH, MAX_COMMENT_LENGTH, MAX_MEALS_TOTAL } from "../shared/types";
+import {
+  MAX_TITLE_LENGTH,
+  MAX_LIST_NAME_LENGTH,
+  MAX_SOURCE_LENGTH,
+  MAX_COMMENT_LENGTH,
+  MAX_MEALS_TOTAL,
+  MEAL_STATUSES,
+  MEAL_NOTES,
+} from "../shared/types";
+
+// Même forme que l'id généré côté client (crypto.randomUUID(), voir
+// src/lib/id.ts) et que le motif déjà utilisé pour l'id d'un repas dans la
+// route image (worker/index.ts) : un id de repas n'a normalement jamais
+// besoin d'autre chose. N'importe qui ayant le code peut envoyer un message
+// "addMeal" forgé (pas d'authentification) — sans cette validation, un id
+// arbitraire se serait retrouvé stocké tel quel, puis réinjecté sans
+// échappement dans un attribut HTML côté client (voir data-id dans
+// src/views/list.ts), ouvrant une XSS stockée touchant tous les appareils
+// connectés à la liste.
+const MEAL_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 export function nextOrder(list: { order: number }[]): number {
   return list.length === 0 ? 0 : Math.max(...list.map((x) => x.order)) + 1;
@@ -32,6 +51,7 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
     }
 
     case "addMeal": {
+      if (!MEAL_ID_RE.test(msg.id)) return;
       const title = msg.title.trim().slice(0, MAX_TITLE_LENGTH);
       if (!title) return;
       // N'importe qui ayant le code peut écrire sans authentification : cette
@@ -70,6 +90,12 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
     }
 
     case "setMealStatus": {
+      // Comme pour l'id (voir MEAL_ID_RE ci-dessus) : le type ClientMessage
+      // ne garantit rien à l'exécution sur un message reçu par websocket,
+      // seulement à la compilation côté client. Sans ce contrôle, un statut
+      // arbitraire aurait fini dans l'attribut data-status non échappé
+      // d'une carte (src/views/list.ts) — même classe de XSS stockée.
+      if (!(MEAL_STATUSES as string[]).includes(msg.status)) return;
       const idx = state.meals.findIndex((m) => m.id === msg.id);
       if (idx === -1) return;
       const meal = state.meals[idx];
@@ -88,6 +114,8 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
     }
 
     case "setMealNote": {
+      // Voir le commentaire dans "setMealStatus" : même risque, même parade.
+      if (msg.note !== null && !(MEAL_NOTES as string[]).includes(msg.note)) return;
       const meal = findMeal(state, msg.id);
       if (!meal) return;
       meal.note = msg.note;

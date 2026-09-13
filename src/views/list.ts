@@ -241,7 +241,17 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
   // note (si renseignée) pour un repas de l'historique. Remplace un ancien
   // emoji dédié, qui prenait trop de place une fois la carte repliée — un
   // simple liséré suffit à donner le même repère en un coup d'œil.
-  const colorAttr = archived ? (meal.note ? ` data-note="${meal.note}"` : "") : ` data-status="${meal.status}"`;
+  // Échappés bien que le reducer serveur valide déjà status/note contre les
+  // enums attendues (voir worker/reducer.ts) : ce sont deux couches
+  // indépendantes, pas l'une à la place de l'autre — un attribut HTML non
+  // échappé reste une XSS stockée potentielle pour n'importe quelle valeur
+  // qui finirait par lui être passée, y compris via un futur changement côté
+  // serveur.
+  const colorAttr = archived
+    ? meal.note
+      ? ` data-note="${escapeHtml(meal.note)}"`
+      : ""
+    : ` data-status="${escapeHtml(meal.status)}"`;
 
   // Sur la liste active, le chevron sert aussi de poignée de glissé (voir
   // wireMealList/SortableJS) : un tap déplie/replie, un appui-glissé
@@ -252,7 +262,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
   const toggleBtn = `<button type="button" class="icon-btn meal-toggle${archived ? "" : " drag-handle"}" data-action="toggle" aria-expanded="${expanded}" aria-label="${expanded ? "Réduire" : "Déplier"}"${archived ? "" : ` title="Glisser pour réordonner"`}>${archived ? icons.chevronDown : icons.grip}</button>`;
 
   return `
-    <li class="meal-card${archived ? " archived" : ""}${expanded ? " expanded" : ""}" data-id="${meal.id}"${colorAttr}>
+    <li class="meal-card${archived ? " archived" : ""}${expanded ? " expanded" : ""}" data-id="${escapeHtml(meal.id)}"${colorAttr}>
       <div class="meal-main" data-action="toggle-row">
         ${toggleBtn}
         <h3 class="meal-title" data-action="edit-title" tabindex="0">${escapeHtml(meal.title)}</h3>
@@ -568,7 +578,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
           const note = m.note
             ? `<span class="add-suggestion-note">${escapeHtml(MEAL_NOTE_LABELS[m.note])}</span>`
             : "";
-          return `<li><button type="button" class="add-suggestion" data-id="${m.id}"><span class="add-suggestion-title">${icons.history} ${escapeHtml(m.title)}</span>${note}</button></li>`;
+          return `<li><button type="button" class="add-suggestion" data-id="${escapeHtml(m.id)}"><span class="add-suggestion-title">${icons.history} ${escapeHtml(m.title)}</span>${note}</button></li>`;
         })
         .join("");
       suggestionsEl.hidden = false;
