@@ -378,12 +378,6 @@ button:focus-visible,
   font-weight: 600;
 }
 
-.filter-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
 .filter-panel {
   display: flex;
   flex-direction: column;
@@ -548,6 +542,23 @@ button:focus-visible,
   align-items: center;
   gap: 0.5rem;
   position: relative;
+}
+
+/* Ligne d'actions secondaires (tri, filtrer, tout déplier) séparée du
+   header : celui-ci ne wrap jamais (le titre y rétrécit plutôt, voir
+   .list-header h1), alors qu'avoir jusqu'à 3 boutons ici doit pouvoir
+   passer à la ligne sur un écran étroit sans rien écraser d'autre. */
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+
+.list-toolbar .btn-link {
+  align-self: center;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .list-header h1 {
@@ -890,12 +901,6 @@ button:focus-visible,
 
 .btn-link:hover {
   opacity: 0.8;
-}
-
-.list-header .btn-link {
-  align-self: center;
-  flex-shrink: 0;
-  white-space: nowrap;
 }
 
 .status-badge {
