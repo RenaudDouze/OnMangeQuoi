@@ -454,6 +454,43 @@ test("le liséré de couleur de la carte suit le statut (en cours) ou la note (h
   await expect(page.locator(".meal-card")).not.toHaveAttribute("data-note");
 });
 
+test("un badge emoji de statut/note reste visible carte repliée, en plus du liséré de couleur", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+
+  // Visible sans déplier la carte, et reflète le statut par défaut.
+  await expect(page.locator(".meal-card")).not.toHaveClass(/expanded/);
+  const badge = page.locator(".meal-status-badge");
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveAttribute("aria-label", "💡 Idée");
+
+  // Suit un changement de statut.
+  await page.click('[data-action="toggle"]');
+  await page.click('.status-pill[data-status="validee"]');
+  await page.click('[data-action="toggle"]');
+  await expect(page.locator(".meal-card")).not.toHaveClass(/expanded/);
+  await expect(badge).toHaveAttribute("aria-label", "✅ Validée");
+
+  // Archivé avec une note : le badge reflète la note plutôt que le statut.
+  await page.click('[data-action="toggle"]');
+  await page.click('.status-pill[data-status="fait"]');
+  await page.click('#mark-done-note-picker [data-note="quand_tu_veux"]');
+  await page.click("#mark-done-confirm");
+  await page.click('.tab-btn[data-tab="archive"]');
+  // La carte reste dépliée depuis l'archivage (expandedIds n'est pas remis
+  // à zéro) : la replier explicitement pour vérifier le badge une fois
+  // repliée, comme pour les étapes précédentes.
+  await page.click('[data-action="toggle"]');
+  await expect(page.locator(".meal-card")).not.toHaveClass(/expanded/);
+  await expect(badge).toHaveAttribute("aria-label", "😍 Quand tu veux où tu veux");
+});
+
 test("le panneau de partage affiche le code de la liste", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
