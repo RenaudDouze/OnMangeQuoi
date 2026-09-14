@@ -33,7 +33,8 @@
     "wrangler": "^4.129.0"
   },
   "overrides": {
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.4",
+    "qs": "^6.16.0"
   },
   "dependencies": {
     "qrcode": "^1.5.4",
