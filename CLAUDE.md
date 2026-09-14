@@ -11,6 +11,7 @@ npm run lint             # oxlint --deny-warnings
 npm run typecheck        # tsc --noEmit against tsconfig.worker.json AND tsconfig.client.json separately
 npm run test             # vitest run (shared/**/*.test.ts, worker/**/*.test.ts only)
 npm run test:coverage    # same, with the 100% coverage gate below
+npm run test:mutation    # stryker run — mutation testing on worker/reducer.ts only (see "Mutation testing")
 npm run test:e2e         # playwright test, against a real `vite dev` server
 npm run deploy           # build + wrangler deploy (manual; CI normally does this)
 ```
@@ -26,7 +27,7 @@ npx playwright test e2e/sync.spec.ts    # e2e, by file
 
 `npm run typecheck` runs **two separate** `tsc` invocations (`tsconfig.worker.json` for `worker/` + `shared/`, `tsconfig.client.json` for `src/` + `shared/`) because the two environments have different global types (`@cloudflare/workers-types` vs `DOM`) that would otherwise conflict.
 
-Before pushing, always run lint, typecheck, test:coverage, and test:e2e — CI runs them as independent jobs and any one failing blocks the Cloudflare/Pages deploy (see below). Before an e2e run, clear rate-limiter state left over from a previous run: `rm -rf .wrangler/state/v3/ratelimit` (see "Local dev quirks").
+Before pushing, always run lint, typecheck, test:coverage, test:mutation, and test:e2e — CI runs them as independent jobs and any one failing blocks the Cloudflare/Pages deploy (see below). Before an e2e run, clear rate-limiter state left over from a previous run: `rm -rf .wrangler/state/v3/ratelimit` (see "Local dev quirks").
 
 ## Architecture
 
@@ -69,6 +70,14 @@ Three Cloudflare native rate limiters (`wrangler.json` → `ratelimits`), all ke
 ### Testing split
 
 Only `shared/**/*.ts` and `worker/reducer.ts` are unit-tested (Vitest, `vitest.config.ts`), at an enforced 100% line/branch/function/statement coverage. `worker/mealRoom.ts` and `worker/index.ts` (the Durable Object shell and the HTTP routing/rate-limiting/R2 glue) are deliberately **not** unit-tested — they're thin I/O layers with no branching logic of their own, and are instead exercised through the Playwright e2e suite (`e2e/`), which runs against a real `vite dev` (Worker + Durable Object + R2, all locally emulated by `workerd`/miniflare — no real Cloudflare account needed for this). If you add real logic to either file, prefer moving it into `reducer.ts` (or another pure, unit-testable function) rather than growing an untested branch there.
+
+### Mutation testing
+
+100% coverage only proves every line *ran* during the test suite, not that the assertions would catch a real regression — `npm run test:mutation` (Stryker, `stryker.conf.mjs`) checks the latter by mutating `worker/reducer.ts` (small behavioral changes: flip a condition, change a comparison operator, empty a block…) and re-running `worker/reducer.test.ts` against each mutant. A mutant that still passes ("survived") means the tests wouldn't notice that exact bug; CI fails under a 95% mutation score. If you add a case to `reducer.ts` without a test that would fail if you got it wrong (e.g. a message handler that finds the wrong meal when several exist), expect this to catch it even though `test:coverage` wouldn't.
+
+Uses `testRunner: "command"` (re-invokes `vitest run worker/reducer.test.ts` as a subprocess per mutant) rather than the official `@stryker-mutator/vitest-runner` plugin: that plugin drives vitest through its programmatic API and, with this project's vitest version, silently runs zero tests per mutant (`testsCompleted: 0` in its own JSON report) — every mutant "survives" by default, regardless of test quality. The command runner is slower but actually runs the tests. Re-check this if bumping `@stryker-mutator/*` or `vitest` significantly.
+
+A handful of mutants are genuinely *equivalent* (the mutated code behaves identically to the original in every observable way, so no test could ever kill them without changing behavior) — e.g. flipping `case "sync":` to `case "":"` is a no-op either way, since an unmatched `msg.type` falls out of the switch and does nothing regardless. These are marked with a `// Stryker disable next-line <Mutator>: <reason>` comment right above the code (see `reducer.ts`) rather than left unexplained or absorbed into a lower threshold — don't add one without confirming by hand that both branches truly produce identical behavior for every input.
 
 ### Local dev quirks
 
