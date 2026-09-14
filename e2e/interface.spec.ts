@@ -670,6 +670,34 @@ test("un toast « Annuler » apparaît après avoir modifié un titre ou un comm
   await expect(page.locator('[data-field="comment"]')).toHaveValue("");
 });
 
+test("le bouton Filtrer vit dans la même barre d'outils que Trier par statut et Tout déplier, et se masque hors de l'onglet actif", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  const toolbar = page.locator("#list-toolbar");
+  await expect(toolbar.locator("#sort-toggle-btn")).toBeVisible();
+  await expect(toolbar.locator("#filter-toggle-btn")).toBeVisible();
+  await expect(toolbar.locator("#toggle-all-btn")).toHaveCount(1);
+
+  // Ouvrir le panneau de filtres, puis quitter l'onglet actif : le bouton
+  // (comme #sort-toggle-btn) et le panneau se masquent tous les deux, pas
+  // seulement le bouton — sans quoi le panneau resterait affiché hors de
+  // propos sur l'historique.
+  await page.click("#filter-toggle-btn");
+  await expect(page.locator("#filter-panel")).toBeVisible();
+
+  await page.click('.tab-btn[data-tab="archive"]');
+  await expect(page.locator("#sort-toggle-btn")).toBeHidden();
+  await expect(page.locator("#filter-toggle-btn")).toBeHidden();
+  await expect(page.locator("#filter-panel")).toBeHidden();
+
+  await page.click('.tab-btn[data-tab="active"]');
+  await expect(page.locator("#filter-toggle-btn")).toBeVisible();
+  await expect(page.locator("#filter-panel")).toBeHidden();
+});
+
 test("les filtres de la liste active se combinent (statut + temps de préparation) et se réinitialisent", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");

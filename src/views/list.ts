@@ -533,8 +533,6 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <button type="button" class="icon-btn" id="btn-home" aria-label="Retour à l'accueil">${icons.back}</button>
         <h1 id="list-title" role="button" tabindex="0">${escapeHtml(state.name)}</h1>
         <span class="conn-dot" id="conn-dot" title="${connected ? "Synchronisé" : "Connexion…"}"></span>
-        <button type="button" class="btn-link" id="sort-toggle-btn" aria-pressed="false">Trier par statut</button>
-        <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
         <button type="button" class="icon-btn" id="btn-share" aria-label="Partager">${icons.share}</button>
       </header>
       <div class="share-panel" id="share-panel" hidden>
@@ -542,6 +540,12 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <div class="qr-wrap" id="qr-wrap" aria-label="QR code de partage"></div>
         <button type="button" class="btn" id="copy-code">Copier le code</button>
         <button type="button" class="btn" id="copy-link">Copier le lien</button>
+      </div>
+
+      <div class="list-toolbar" id="list-toolbar">
+        <button type="button" class="btn-link" id="sort-toggle-btn" aria-pressed="false">Trier par statut</button>
+        <button type="button" class="btn-link" id="filter-toggle-btn" aria-pressed="false">Filtrer</button>
+        <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
       </div>
 
       <nav class="tabs" id="tabs">
@@ -559,20 +563,17 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <ul class="add-suggestions" id="add-suggestions" aria-label="Repas déjà faits" hidden></ul>
       </section>
 
-      <section class="card filter-card" id="filter-card">
-        <button type="button" class="btn-link" id="filter-toggle-btn" aria-pressed="false">Filtrer</button>
-        <div class="filter-panel" id="filter-panel" hidden>
-          <div class="filter-group">
-            <span class="meal-field-label">Statut</span>
-            <div id="filter-status-pills"></div>
-          </div>
-          <div class="filter-group">
-            <span class="meal-field-label">Temps de préparation</span>
-            <div id="filter-preptime-pills"></div>
-          </div>
-          <button type="button" class="btn-link filter-reset-btn" id="filter-reset-btn" hidden>Réinitialiser les filtres</button>
+      <div class="card filter-panel" id="filter-panel" hidden>
+        <div class="filter-group">
+          <span class="meal-field-label">Statut</span>
+          <div id="filter-status-pills"></div>
         </div>
-      </section>
+        <div class="filter-group">
+          <span class="meal-field-label">Temps de préparation</span>
+          <div id="filter-preptime-pills"></div>
+        </div>
+        <button type="button" class="btn-link filter-reset-btn" id="filter-reset-btn" hidden>Réinitialiser les filtres</button>
+      </div>
 
       <section class="card search-card" id="search-card" hidden>
         <div class="search-row">
@@ -776,8 +777,6 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     root.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tab === tab)));
     const addCard = root.querySelector("#add-meal-card") as HTMLElement | null;
     if (addCard) addCard.hidden = tab !== "active";
-    const filterCard = root.querySelector("#filter-card") as HTMLElement | null;
-    if (filterCard) filterCard.hidden = tab !== "active";
     const searchCard = root.querySelector("#search-card") as HTMLElement | null;
     if (searchCard) searchCard.hidden = tab !== "archive";
     const mealListEl = root.querySelector("#meal-list") as HTMLElement | null;
@@ -785,6 +784,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     const planningView = root.querySelector("#planning-view") as HTMLElement | null;
     if (planningView) planningView.hidden = tab !== "planning";
     updateSortToggleBtn();
+    updateFilterToggleBtn();
     renderMeals();
   }
 
@@ -803,6 +803,22 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     btn.hidden = tab !== "active";
     btn.setAttribute("aria-pressed", String(sortByStatus));
     btn.textContent = sortByStatus ? "Tri manuel" : "Trier par statut";
+  }
+
+  /** Les filtres ne concernent que la liste active (voir visibleMeals) :
+   * masqué sur les autres onglets, même motif que updateSortToggleBtn.
+   * Referme aussi le panneau en quittant l'onglet actif — sans bouton
+   * visible pour le rouvrir/refermer ailleurs, il resterait sinon affiché
+   * hors de propos sur l'historique ou le planning. */
+  function updateFilterToggleBtn(): void {
+    const btn = root.querySelector("#filter-toggle-btn") as HTMLButtonElement | null;
+    if (!btn) return;
+    btn.hidden = tab !== "active";
+    if (tab !== "active") {
+      const panel = root.querySelector("#filter-panel") as HTMLElement | null;
+      if (panel) panel.hidden = true;
+      btn.setAttribute("aria-pressed", "false");
+    }
   }
 
   function wireSearch(): void {
@@ -852,6 +868,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       renderMeals();
     });
     renderFilterPickers();
+    updateFilterToggleBtn();
   }
 
   function renderFilterPickers(): void {
