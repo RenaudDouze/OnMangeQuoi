@@ -4,5 +4,7 @@ dist/
 coverage/
 test-results/
 playwright-report/
+reports/
+.stryker-tmp/
 *.local
 .DS_Store

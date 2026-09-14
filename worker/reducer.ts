@@ -45,6 +45,10 @@ function findMeal(state: ListState, id: string): Meal | undefined {
  * straight off the public WebSocket — see "setMealImage" below. */
 export function applyMessage(state: ListState, msg: ClientMessage, now: number = Date.now(), internal: boolean = false): void {
   switch (msg.type) {
+    // Stryker disable next-line StringLiteral: mutant équivalent — "sync" ne
+    // fait rien, et un type inconnu ne correspondant à aucun autre "case" ne
+    // fait rien non plus (switch sans "default") : les deux versions sont un
+    // no-op strictement identique, impossible à distinguer par le comportement.
     case "sync":
       return;
 

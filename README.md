@@ -135,6 +135,7 @@ wrangler.json       Configuration Cloudflare (Durable Object, assets SPA,
 npm run lint          # oxlint
 npm run typecheck
 npm run test:coverage # Vitest — logique pure (shared/, worker/reducer.ts)
+npm run test:mutation # Stryker — mutation testing sur worker/reducer.ts
 npm run test:e2e      # Playwright, contre `vite dev`
 ```
 
@@ -142,10 +143,16 @@ npm run test:e2e      # Playwright, contre `vite dev`
 n'est volontairement pas couvert par les tests unitaires — toute sa logique
 métier vit dans `worker/reducer.ts`, entièrement testée.
 
-`.github/workflows/` : `ci.yml` (lint, typecheck, tests + couverture, e2e,
-audit, build) puis, une fois la CI verte sur `main`, `deploy.yml`
-(déploiement Cloudflare, jamais sur un simple push direct) et `pages.yml`
-(publication GitHub Pages). Dependabot et CodeQL sont aussi configurés.
+Le mutation testing va plus loin que la couverture de lignes : il modifie
+légèrement `worker/reducer.ts` (inverse une condition, change un opérateur…)
+et vérifie que les tests échouent bien sur chaque version buggée. Un mutant
+qui « survit » signale une assertion trop faible pour détecter ce bug précis.
+
+`.github/workflows/` : `ci.yml` (lint, typecheck, tests + couverture,
+mutation testing, e2e, audit, build) puis, une fois la CI verte sur `main`,
+`deploy.yml` (déploiement Cloudflare, jamais sur un simple push direct) et
+`pages.yml` (publication GitHub Pages). Dependabot et CodeQL sont aussi
+configurés.
 
 ## Modèle de données
 

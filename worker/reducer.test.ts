@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { applyMessage, nextOrder, prevOrder } from "./reducer";
-import type { ListState } from "../shared/types";
+import type { ListState, Meal } from "../shared/types";
 import { MAX_TITLE_LENGTH, MAX_LIST_NAME_LENGTH, MAX_SOURCE_LENGTH, MAX_COMMENT_LENGTH, MAX_MEALS_TOTAL } from "../shared/types";
 
 function makeState(overrides: Partial<ListState> = {}): ListState {
@@ -16,6 +16,25 @@ function makeState(overrides: Partial<ListState> = {}): ListState {
 }
 
 const NOW = 1_700_000_000_000;
+
+function makeMeal(overrides: Partial<Meal> = {}): Meal {
+  return {
+    id: "m",
+    title: "Repas",
+    status: "idee",
+    note: null,
+    source: "",
+    comment: "",
+    order: 0,
+    createdAt: NOW,
+    updatedAt: NOW,
+    doneAt: null,
+    hasImage: false,
+    imageVersion: 0,
+    prepTime: null,
+    ...overrides,
+  };
+}
 
 describe("nextOrder", () => {
   it("vaut 0 pour une liste vide", () => {
@@ -113,25 +132,27 @@ describe("applyMessage: addMeal", () => {
 
   it("ignore l'ajout au-delà de MAX_MEALS_TOTAL repas (actifs + archivés)", () => {
     const state = makeState({
-      meals: Array.from({ length: MAX_MEALS_TOTAL }, (_, i) => ({
-        id: `existing-${i}`,
-        title: "Repas",
-        status: "idee" as const,
-        note: null,
-        source: "",
-        comment: "",
-        order: i,
-        createdAt: NOW,
-        updatedAt: NOW,
-        doneAt: null,
-        hasImage: false,
-        imageVersion: 0,
-        prepTime: null,
-      })),
+      meals: Array.from({ length: MAX_MEALS_TOTAL }, (_, i) => makeMeal({ id: `existing-${i}`, order: i })),
     });
     applyMessage(state, { type: "addMeal", id: "trop", title: "Un de trop" }, NOW);
     expect(state.meals).toHaveLength(MAX_MEALS_TOTAL);
     expect(state.meals.some((m) => m.id === "trop")).toBe(false);
+  });
+
+  it("compte actifs ET archivés ensemble pour MAX_MEALS_TOTAL, pas seulement les actifs", () => {
+    const state = makeState({
+      meals: Array.from({ length: MAX_MEALS_TOTAL - 1 }, (_, i) => makeMeal({ id: `existing-${i}`, order: i })),
+      archive: [makeMeal({ id: "archived-1", status: "fait" })],
+    });
+    applyMessage(state, { type: "addMeal", id: "trop", title: "Un de trop" }, NOW);
+    expect(state.meals).toHaveLength(MAX_MEALS_TOTAL - 1);
+    expect(state.meals.some((m) => m.id === "trop")).toBe(false);
+  });
+
+  it("ignore un id dont seule la fin ressemble à un id valide (l'ancre ^ du motif compte)", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "../etc/passwd", title: "A" }, NOW);
+    expect(state.meals).toEqual([]);
   });
 });
 
@@ -195,6 +216,24 @@ describe("applyMessage: updateMeal", () => {
     expect(state.meals).toEqual([]);
   });
 
+  it("modifie le bon repas actif quand plusieurs existent", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "A" }, NOW);
+    applyMessage(state, { type: "addMeal", id: "m2", title: "B" }, NOW);
+    applyMessage(state, { type: "updateMeal", id: "m2", title: "B modifié" }, NOW + 1);
+    expect(state.meals.find((m) => m.id === "m1")!.title).toBe("A");
+    expect(state.meals.find((m) => m.id === "m2")!.title).toBe("B modifié");
+  });
+
+  it("modifie le bon repas archivé quand plusieurs existent", () => {
+    const state = makeState({
+      archive: [makeMeal({ id: "m1", title: "A", status: "fait" }), makeMeal({ id: "m2", title: "B", status: "fait" })],
+    });
+    applyMessage(state, { type: "updateMeal", id: "m2", comment: "Excellent" }, NOW + 1);
+    expect(state.archive.find((m) => m.id === "m1")!.comment).toBe("");
+    expect(state.archive.find((m) => m.id === "m2")!.comment).toBe("Excellent");
+  });
+
   it("tronque titre, source et commentaire trop longs", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
@@ -256,6 +295,15 @@ describe("applyMessage: setMealStatus", () => {
     // @ts-expect-error message forgé volontairement invalide, pour tester la défense côté serveur
     applyMessage(state, { type: "setMealStatus", id: "m1", status: 'x" onmouseover="alert(1)' }, NOW + 1);
     expect(state.meals[0].status).toBe("idee");
+  });
+
+  it("change le statut du bon repas actif quand plusieurs existent", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "A" }, NOW);
+    applyMessage(state, { type: "addMeal", id: "m2", title: "B" }, NOW);
+    applyMessage(state, { type: "setMealStatus", id: "m2", status: "validee" }, NOW + 1);
+    expect(state.meals.find((m) => m.id === "m1")!.status).toBe("idee");
+    expect(state.meals.find((m) => m.id === "m2")!.status).toBe("validee");
   });
 
   it("un doneAt explicite (repas noté après coup) est utilisé à la place de 'now'", () => {
@@ -399,15 +447,30 @@ describe("applyMessage: deleteMeal", () => {
     applyMessage(state, { type: "deleteMeal", id: "m1" }, NOW);
     expect(state.meals).toEqual([]);
   });
+
+  it("ne supprime que le repas actif ciblé quand plusieurs existent", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "A" }, NOW);
+    applyMessage(state, { type: "addMeal", id: "m2", title: "B" }, NOW);
+    applyMessage(state, { type: "deleteMeal", id: "m1" }, NOW);
+    expect(state.meals.map((m) => m.id)).toEqual(["m2"]);
+  });
 });
 
 describe("applyMessage: deleteArchivedMeal", () => {
-  it("supprime définitivement un repas archivé", () => {
+  it("supprime définitivement un repas archivé, sans le faire réapparaître en liste active", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "A" }, NOW);
     applyMessage(state, { type: "setMealStatus", id: "m1", status: "fait" }, NOW);
     applyMessage(state, { type: "deleteArchivedMeal", id: "m1" }, NOW);
     expect(state.archive).toEqual([]);
+    expect(state.meals).toEqual([]);
+  });
+
+  it("ne supprime que le repas archivé ciblé quand plusieurs existent", () => {
+    const state = makeState({ archive: [makeMeal({ id: "m1", status: "fait" }), makeMeal({ id: "m2", status: "fait" })] });
+    applyMessage(state, { type: "deleteArchivedMeal", id: "m1" }, NOW);
+    expect(state.archive.map((m) => m.id)).toEqual(["m2"]);
   });
 });
 
@@ -440,6 +503,13 @@ describe("applyMessage: restoreMeal", () => {
     const state = makeState();
     applyMessage(state, { type: "restoreMeal", id: "ghost" }, NOW);
     expect(state.meals).toEqual([]);
+  });
+
+  it("restaure le bon repas archivé quand plusieurs existent", () => {
+    const state = makeState({ archive: [makeMeal({ id: "m1", status: "fait" }), makeMeal({ id: "m2", status: "fait" })] });
+    applyMessage(state, { type: "restoreMeal", id: "m2" }, NOW);
+    expect(state.archive.map((m) => m.id)).toEqual(["m1"]);
+    expect(state.meals.map((m) => m.id)).toEqual(["m2"]);
   });
 });
 
