@@ -34,6 +34,12 @@ export const icons = {
   // qui ne gère que souris/tactile) : monter/descendre un repas d'un cran.
   arrowUp: svg('<path d="M12 19V5M5 12l7-7 7 7"/>'),
   arrowDown: svg('<path d="M12 5v14M19 12l-7 7-7-7"/>'),
+  // Navigation planning (semaine suivante) / galerie photo (image suivante) :
+  // miroir de "back" ci-dessus.
+  forward: svg('<path d="M5 12h14M12 5l7 7-7 7"/>'),
+  calendar: svg(
+    '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  ),
   image: svg(
     '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
   ),

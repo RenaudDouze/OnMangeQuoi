@@ -313,6 +313,93 @@ button:focus-visible,
   width: 100%;
 }
 
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.search-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-row .btn-link {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.stats-panel {
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.stats-total {
+  margin: 0;
+  font-weight: 600;
+}
+
+.stats-empty {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.stats-group h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stats-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stats-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.92em;
+}
+
+.stats-count {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.filter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.filter-reset-btn {
+  align-self: flex-start;
+}
+
 .add-suggestions {
   position: absolute;
   left: 1rem;
@@ -549,6 +636,86 @@ button:focus-visible,
   border-color: var(--primary);
 }
 
+.planning-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.planning-week-label {
+  flex: 1;
+  font-weight: 600;
+  text-align: center;
+  min-width: 10ch;
+}
+
+.planning-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.6rem;
+}
+
+.planning-day {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.planning-day.today {
+  border-color: var(--primary);
+}
+
+.planning-day-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+}
+
+.planning-day.today .planning-day-label {
+  color: var(--primary);
+}
+
+.planning-day-date {
+  font-weight: 400;
+}
+
+.planning-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.planning-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+  background: var(--checked-bg);
+  border-radius: 8px;
+  padding: 0.35em 0.5em;
+  font-size: 0.88em;
+}
+
+.planning-entry-title {
+  overflow-wrap: anywhere;
+}
+
+.planning-entry-empty {
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
 .meal-list {
   list-style: none;
   margin: 0;
@@ -731,7 +898,13 @@ button:focus-visible,
   gap: 0.35rem;
 }
 
-.status-pill {
+/* .filter-status-pill (panneau de filtre, voir filterStatusPickerHtml) :
+   classe distincte de .status-pill bien que visuellement identique — les
+   deux pickers coexistent toujours dans le DOM (carte de repas + panneau de
+   filtre), une classe partagée rendrait les sélecteurs ambigus (ex : en
+   tests e2e). */
+.status-pill,
+.filter-status-pill {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-muted);
@@ -743,48 +916,59 @@ button:focus-visible,
   white-space: nowrap;
 }
 
-.status-pill:hover {
+.status-pill:hover,
+.filter-status-pill:hover {
   background: var(--checked-bg);
 }
 
-.status-pill[aria-pressed="true"] {
+.status-pill[aria-pressed="true"],
+.filter-status-pill[aria-pressed="true"] {
   color: #fff;
   border-color: transparent;
 }
 
-.status-pill[data-status="idee"][aria-pressed="true"] {
+.status-pill[data-status="idee"][aria-pressed="true"],
+.filter-status-pill[data-status="idee"][aria-pressed="true"] {
   background: #8d8177;
 }
 
-.status-pill[data-status="validee"][aria-pressed="true"] {
+.status-pill[data-status="validee"][aria-pressed="true"],
+.filter-status-pill[data-status="validee"][aria-pressed="true"] {
   background: #3b6ea5;
 }
 
-.status-pill[data-status="commandee"][aria-pressed="true"] {
+.status-pill[data-status="commandee"][aria-pressed="true"],
+.filter-status-pill[data-status="commandee"][aria-pressed="true"] {
   background: #7c5cbf;
 }
 
-.status-pill[data-status="rangee"][aria-pressed="true"] {
+.status-pill[data-status="rangee"][aria-pressed="true"],
+.filter-status-pill[data-status="rangee"][aria-pressed="true"] {
   background: #2b8f86;
 }
 
-.status-pill[data-status="non_complet"][aria-pressed="true"] {
+.status-pill[data-status="non_complet"][aria-pressed="true"],
+.filter-status-pill[data-status="non_complet"][aria-pressed="true"] {
   background: var(--danger);
 }
 
-.status-pill[data-status="fait"][aria-pressed="true"] {
+.status-pill[data-status="fait"][aria-pressed="true"],
+.filter-status-pill[data-status="fait"][aria-pressed="true"] {
   background: #2f9e52;
 }
 
 /* Même motif que .status-picker/.status-pill ci-dessus (pastilles, une
-   valeur au plus sélectionnée). */
+   valeur au plus sélectionnée pour .preptime-pill ; .filter-preptime-pill,
+   dans le panneau de filtre, est multi-sélection mais reste visuellement
+   identique — voir le commentaire sur .filter-status-pill ci-dessus). */
 .preptime-picker {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
 }
 
-.preptime-pill {
+.preptime-pill,
+.filter-preptime-pill {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-muted);
@@ -796,24 +980,29 @@ button:focus-visible,
   white-space: nowrap;
 }
 
-.preptime-pill:hover {
+.preptime-pill:hover,
+.filter-preptime-pill:hover {
   background: var(--checked-bg);
 }
 
-.preptime-pill[aria-pressed="true"] {
+.preptime-pill[aria-pressed="true"],
+.filter-preptime-pill[aria-pressed="true"] {
   color: #fff;
   border-color: transparent;
 }
 
-.preptime-pill[data-preptime="rapide"][aria-pressed="true"] {
+.preptime-pill[data-preptime="rapide"][aria-pressed="true"],
+.filter-preptime-pill[data-preptime="rapide"][aria-pressed="true"] {
   background: #2f9e52;
 }
 
-.preptime-pill[data-preptime="normal"][aria-pressed="true"] {
+.preptime-pill[data-preptime="normal"][aria-pressed="true"],
+.filter-preptime-pill[data-preptime="normal"][aria-pressed="true"] {
   background: #3b6ea5;
 }
 
-.preptime-pill[data-preptime="long"][aria-pressed="true"] {
+.preptime-pill[data-preptime="long"][aria-pressed="true"],
+.filter-preptime-pill[data-preptime="long"][aria-pressed="true"] {
   background: #c9822c;
 }
 
@@ -867,20 +1056,25 @@ button:focus-visible,
   font-weight: 400;
 }
 
-.meal-image-preview {
+.meal-image-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.meal-image-item {
   position: relative;
   display: inline-block;
-  align-self: flex-start;
   max-width: 100%;
 }
 
-.meal-image-preview img {
+.meal-image-item img {
   display: block;
-  max-width: 100%;
-  max-height: 240px;
+  width: 120px;
+  height: 120px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .meal-image-remove {
@@ -905,7 +1099,7 @@ button:focus-visible,
 }
 
 .meal-image-field.is-loading .meal-image-add,
-.meal-image-field.is-loading .meal-image-preview {
+.meal-image-field.is-loading .meal-image-gallery {
   opacity: 0.5;
   pointer-events: none;
 }
@@ -1010,6 +1204,42 @@ button:focus-visible,
 
 .image-lightbox-close:hover {
   background: rgba(0, 0, 0, 0.75);
+}
+
+.image-lightbox-prev,
+.image-lightbox-next {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  z-index: 31;
+}
+
+.image-lightbox-prev:hover,
+.image-lightbox-next:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.image-lightbox-prev {
+  left: calc(0.75rem + env(safe-area-inset-left));
+}
+
+.image-lightbox-next {
+  right: calc(0.75rem + env(safe-area-inset-right));
+}
+
+.image-lightbox-counter {
+  position: fixed;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.3em 0.9em;
+  font-size: 0.85rem;
+  z-index: 31;
 }
 
 .modal {

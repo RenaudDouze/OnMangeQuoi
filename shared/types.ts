@@ -12,6 +12,10 @@ export const MAX_COMMENT_LENGTH = 2000;
 export const MAX_MEALS_TOTAL = 1000;
 /** Taille max d'une image jointe à un repas (photo ou capture d'écran). */
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** Nombre max de photos par repas : n'importe qui ayant le code peut en
+ * envoyer sans authentification, cette borne évite qu'un client (buggé ou
+ * malveillant) n'en accumule indéfiniment sur un seul repas. */
+export const MAX_IMAGES_PER_MEAL = 10;
 /** Types d'image acceptés en upload — voir worker/index.ts. Pas de SVG :
  * un SVG peut embarquer du script, un risque inutile pour une simple photo. */
 export const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
@@ -66,14 +70,19 @@ export interface Meal {
   updatedAt: number;
   /** Date du dernier passage au statut "fait" (archivage). null en liste active. */
   doneAt: number | null;
-  /** Image jointe (photo ou capture d'écran) — voir /api/lists/:code/meals/:id/image.
-   * imageVersion s'incrémente à chaque remplacement, pour que l'URL de
-   * l'image (qui l'inclut en query string) change et invalide le cache
-   * navigateur plutôt que de réafficher l'ancienne image. */
-  hasImage: boolean;
-  imageVersion: number;
+  /** Photos jointes (ids d'image, dans l'ordre d'ajout) — voir
+   * /api/lists/:code/meals/:id/images. Chaque id est permanent et jamais
+   * réutilisé pour un contenu différent (voir worker/index.ts, qui en génère
+   * un nouveau à chaque envoi), donc pas besoin de numéro de version pour
+   * invalider un cache navigateur : l'URL d'une photo donnée ne change
+   * jamais de contenu, un cache long est donc toujours sûr. */
+  images: string[];
   /** Temps de préparation estimé (rapide/normal/long) ; null si non renseigné. */
   prepTime: PrepTime | null;
+  /** Jour auquel ce repas est planifié (précision jour, pas d'heure) ; null
+   * si non planifié. Uniquement pertinent en liste active — voir l'onglet
+   * Planning. */
+  plannedDate: number | null;
 }
 
 export interface ListState {
@@ -96,7 +105,9 @@ export type ClientMessage =
   | { type: "setMealStatus"; id: string; status: MealStatus; doneAt?: number }
   | { type: "setMealNote"; id: string; note: MealNote | null }
   | { type: "setMealPrepTime"; id: string; prepTime: PrepTime | null }
-  | { type: "setMealImage"; id: string; hasImage: boolean }
+  | { type: "setMealPlannedDate"; id: string; plannedDate: number | null }
+  | { type: "addMealImage"; id: string; imageId: string }
+  | { type: "removeMealImage"; id: string; imageId: string }
   | { type: "deleteMeal"; id: string }
   | { type: "reorderMeals"; orderedIds: string[] }
   | { type: "restoreMeal"; id: string }

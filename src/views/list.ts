@@ -1,4 +1,4 @@
-import type { ListState, Meal, MealStatus } from "../../shared/types";
+import type { ListState, Meal, MealStatus, PrepTime } from "../../shared/types";
 import {
   MEAL_STATUSES,
   MEAL_STATUS_LABELS,
@@ -11,6 +11,7 @@ import {
   MAX_SOURCE_LENGTH,
   MAX_COMMENT_LENGTH,
   MAX_IMAGE_BYTES,
+  MAX_IMAGES_PER_MEAL,
   ALLOWED_IMAGE_TYPES,
 } from "../../shared/types";
 import { ListConnection } from "../lib/ws";
@@ -24,6 +25,7 @@ import { wireConfirmClick } from "../lib/confirmClick";
 import { icons } from "../lib/icons";
 import { appPath } from "../lib/basePath";
 import { renderQrSvg } from "../lib/qr";
+import { computeHistoryStats } from "../lib/historyStats";
 import Sortable from "sortablejs";
 
 const URL_RE = /^(https?:\/\/|www\.)/i;
@@ -77,6 +79,122 @@ function prepTimePickerHtml(selected: Meal["prepTime"]): string {
       `<button type="button" class="preptime-pill" data-preptime="${p}" aria-pressed="${p === selected}">${PREP_TIME_LABELS[p]}</button>`,
   ).join("");
   return `<div class="preptime-picker" role="group" aria-label="Temps de préparation">${noneBtn}${options}</div>`;
+}
+
+/** Pastilles multi-sélection (contrairement à statusPickerHtml, une seule
+ * valeur au plus) : voir activeStatusFilters dans mountListView. Classes
+ * distinctes de .status-pill/.preptime-pill (bien que visuellement
+ * identiques, voir style.css) : les deux pickers coexistent toujours dans
+ * le DOM (carte de repas + panneau de filtre), une classe partagée rendrait
+ * les sélecteurs ambigus (ex : en tests e2e). */
+function filterStatusPickerHtml(active: Set<MealStatus>): string {
+  const pills = MEAL_STATUSES.map(
+    (s) => `<button type="button" class="filter-status-pill" data-status="${s}" aria-pressed="${active.has(s)}">${MEAL_STATUS_LABELS[s]}</button>`,
+  ).join("");
+  return `<div class="status-picker" role="group" aria-label="Filtrer par statut">${pills}</div>`;
+}
+
+function filterPrepTimePickerHtml(active: Set<PrepTime>): string {
+  const pills = PREP_TIMES.map(
+    (p) =>
+      `<button type="button" class="filter-preptime-pill" data-preptime="${p}" aria-pressed="${active.has(p)}">${PREP_TIME_LABELS[p]}</button>`,
+  ).join("");
+  return `<div class="preptime-picker" role="group" aria-label="Filtrer par temps de préparation">${pills}</div>`;
+}
+
+function historyStatsHtml(archive: Meal[]): string {
+  const stats = computeHistoryStats(archive);
+  if (stats.total === 0) {
+    return `<p class="stats-empty">Aucun repas dans l'historique pour l'instant.</p>`;
+  }
+  const noteGroup = stats.byNote.length
+    ? `<div class="stats-group">
+        <h3>Par note</h3>
+        <ul class="stats-list">${stats.byNote
+          .map((x) => `<li><span>${MEAL_NOTE_LABELS[x.note]}</span><span class="stats-count">${x.count}</span></li>`)
+          .join("")}</ul>
+      </div>`
+    : "";
+  const prepGroup = stats.byPrepTime.length
+    ? `<div class="stats-group">
+        <h3>Par temps de préparation</h3>
+        <ul class="stats-list">${stats.byPrepTime
+          .map((x) => `<li><span>${PREP_TIME_LABELS[x.prepTime]}</span><span class="stats-count">${x.count}</span></li>`)
+          .join("")}</ul>
+      </div>`
+    : "";
+  const topGroup = stats.topMeals.length
+    ? `<div class="stats-group">
+        <h3>Les plus refaits</h3>
+        <ul class="stats-list">${stats.topMeals
+          .map((x) => `<li><span>${escapeHtml(x.title)}</span><span class="stats-count">×${x.count}</span></li>`)
+          .join("")}</ul>
+      </div>`
+    : "";
+  return `<p class="stats-total">${stats.total} repas dans l'historique.</p>${noteGroup}${prepGroup}${topGroup}`;
+}
+
+/** Lundi de la semaine (minuit local) contenant `ts` — voir l'onglet
+ * Planning, qui affiche toujours une semaine complète de lundi à dimanche. */
+function startOfWeek(ts: number): number {
+  const d = new Date(ts);
+  const day = d.getDay(); // 0 = dimanche .. 6 = samedi
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diffToMonday);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function addDays(ts: number, days: number): number {
+  const d = new Date(ts);
+  d.setDate(d.getDate() + days);
+  return d.getTime();
+}
+
+const PLANNING_DAY_LABELS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+
+/** Grille des 7 jours de la semaine commençant à `weekStart` (voir
+ * startOfWeek), chacun listant les repas actifs planifiés ce jour-là — voir
+ * Meal.plannedDate. Uniquement les repas actifs : un repas archivé ("fait")
+ * n'a plus de raison d'apparaître dans une planification à venir. */
+function planningHtml(activeMeals: Meal[], weekStart: number): string {
+  // Minuit aujourd'hui (contrairement à startOfWeek(Date.now()), qui donne
+  // le lundi de la semaine courante, pas le jour lui-même) : sert à
+  // repérer la colonne du jour dans la grille, quelle que soit la semaine
+  // affichée.
+  const todayDayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+  const days = PLANNING_DAY_LABELS.map((label, i) => {
+    const dayStart = addDays(weekStart, i);
+    const dayEnd = addDays(weekStart, i + 1);
+    const dayMeals = activeMeals.filter((m) => m.plannedDate !== null && m.plannedDate >= dayStart && m.plannedDate < dayEnd);
+    const isToday = dayStart === todayDayStart;
+    const entries = dayMeals.length
+      ? dayMeals
+          .map(
+            (m) => `
+              <li class="planning-entry" data-id="${escapeHtml(m.id)}">
+                <span class="planning-entry-title">${escapeHtml(m.title)}</span>
+                <button type="button" class="icon-btn" data-action="unplan" aria-label="Retirer « ${escapeHtml(m.title)} » du planning">${icons.close}</button>
+              </li>`,
+          )
+          .join("")
+      : `<li class="planning-entry-empty">—</li>`;
+    const dateLabel = new Date(dayStart).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    return `
+      <div class="planning-day${isToday ? " today" : ""}">
+        <div class="planning-day-label">${label} <span class="planning-day-date">${dateLabel}</span></div>
+        <ul class="planning-entries">${entries}</ul>
+      </div>`;
+  }).join("");
+  const weekLabel = `Semaine du ${new Date(weekStart).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`;
+  return `
+    <div class="planning-nav">
+      <button type="button" class="icon-btn" id="planning-prev" aria-label="Semaine précédente">${icons.back}</button>
+      <span class="planning-week-label">${weekLabel}</span>
+      <button type="button" class="icon-btn" id="planning-next" aria-label="Semaine suivante">${icons.forward}</button>
+      <button type="button" class="btn-link" id="planning-today-btn">Aujourd'hui</button>
+    </div>
+    <div class="planning-grid">${days}</div>`;
 }
 
 function formatDate(ts: number): string {
@@ -165,21 +283,22 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
   (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement)?.focus();
 }
 
-/** Affiche une image en plein écran (clic sur une miniature) : overlay
- * sombre, fermeture au clic n'importe où dessus, sur Échap, ou sur le
- * bouton fermer — même mécanique que openMarkDoneModal. */
-function openImageLightbox(url: string, alt: string): void {
+/** Affiche une image en plein écran (clic sur une miniature de la galerie,
+ * voir mealImageFieldHtml/wireMealImage) : overlay sombre, fermeture au clic
+ * n'importe où dessus, sur Échap, ou sur le bouton fermer — même mécanique
+ * que openMarkDoneModal. Plusieurs photos par repas (voir Meal.images) : la
+ * navigation précédent/suivant (boutons, flèches clavier) ne s'affiche que
+ * s'il y en a plus d'une. */
+function openImageLightbox(images: { url: string; alt: string }[], startIndex: number): void {
+  if (images.length === 0) return;
+  let index = startIndex;
   const triggerEl = document.activeElement;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay image-lightbox-overlay";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", alt);
-  overlay.innerHTML = `
-    <button type="button" class="icon-btn image-lightbox-close" aria-label="Fermer">${icons.close}</button>
-    <img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" class="image-lightbox-img" />`;
   document.body.appendChild(overlay);
-  overlay.querySelector<HTMLButtonElement>(".image-lightbox-close")?.focus();
+
   const untrap = trapFocus(overlay, triggerEl);
 
   const close = () => {
@@ -187,33 +306,86 @@ function openImageLightbox(url: string, alt: string): void {
     document.removeEventListener("keydown", onKeydown);
     untrap();
   };
+
+  function go(delta: number): void {
+    index = (index + delta + images.length) % images.length;
+    renderContent(delta > 0 ? "next" : "prev");
+  }
+
   function onKeydown(e: KeyboardEvent): void {
     if (e.key === "Escape") close();
+    else if (e.key === "ArrowLeft" && images.length > 1) go(-1);
+    else if (e.key === "ArrowRight" && images.length > 1) go(1);
   }
+
+  // Régénère le contenu de l'overlay plutôt que d'en ouvrir une nouvelle à
+  // chaque navigation : garde le même overlay/piège de focus, et permet de
+  // rendre le focus au bouton précédent/suivant qui vient d'être activé
+  // (focusTarget) plutôt qu'au bouton fermer par défaut.
+  function renderContent(focusTarget: "close" | "prev" | "next" = "close"): void {
+    const img = images[index];
+    overlay.setAttribute("aria-label", img.alt);
+    const hasMultiple = images.length > 1;
+    overlay.innerHTML = `
+      <button type="button" class="icon-btn image-lightbox-close" aria-label="Fermer">${icons.close}</button>
+      ${hasMultiple ? `<button type="button" class="icon-btn image-lightbox-prev" aria-label="Photo précédente">${icons.back}</button>` : ""}
+      <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt)}" class="image-lightbox-img" />
+      ${hasMultiple ? `<button type="button" class="icon-btn image-lightbox-next" aria-label="Photo suivante">${icons.forward}</button>` : ""}
+      ${hasMultiple ? `<span class="image-lightbox-counter">${index + 1} / ${images.length}</span>` : ""}`;
+    overlay.querySelector(".image-lightbox-close")?.addEventListener("click", close);
+    overlay.querySelector(".image-lightbox-prev")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      go(-1);
+    });
+    overlay.querySelector(".image-lightbox-next")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      go(1);
+    });
+    const focusSelector =
+      focusTarget === "prev" ? ".image-lightbox-prev" : focusTarget === "next" ? ".image-lightbox-next" : ".image-lightbox-close";
+    (overlay.querySelector<HTMLElement>(focusSelector) ?? overlay.querySelector<HTMLElement>(".image-lightbox-close"))?.focus();
+  }
+
+  // Un clic n'importe où sur l'overlay referme (pas seulement le bouton
+  // fermer dédié) — y compris sur l'image elle-même, qui n'a pas d'autre
+  // interaction. Les boutons précédent/suivant appellent stopPropagation
+  // (voir plus haut) pour ne pas déclencher cette fermeture après avoir
+  // juste navigué.
   overlay.addEventListener("click", close);
   document.addEventListener("keydown", onKeydown);
+  renderContent();
 }
 
-/** Photo ou capture d'écran jointe : bouton d'ajout si absente, sinon
- * miniature (cliquable pour l'afficher en plein écran) + suppression.
- * Uploadée via un input file (data-action="add-image") ou en collant
- * depuis le presse-papiers (voir wireMealCard) — les deux passent par la
- * même fonction d'envoi, dont l'indicateur de chargement ci-dessous
- * (masqué par défaut) reflète la progression : sans lui, le temps
- * d'attente réseau donne l'impression que rien ne s'est passé. */
+/** Photos jointes (jusqu'à MAX_IMAGES_PER_MEAL) : une galerie de miniatures
+ * (chacune cliquable pour s'afficher en plein écran avec navigation, voir
+ * openImageLightbox, et individuellement supprimable) + un bouton d'ajout
+ * tant que la limite n'est pas atteinte. Uploadées via un input file
+ * (data-action="add-image") ou en collant depuis le presse-papiers (voir
+ * wireMealCard) — les deux passent par la même fonction d'envoi, dont
+ * l'indicateur de chargement ci-dessous (masqué par défaut) reflète la
+ * progression : sans lui, le temps d'attente réseau donne l'impression que
+ * rien ne s'est passé. */
 function mealImageFieldHtml(meal: Meal, code: string): string {
-  const content = meal.hasImage
-    ? `<div class="meal-image-preview">
-        <button type="button" class="meal-image-view" data-action="view-image">
-          <img src="${escapeHtml(mealImageUrl(code, meal.id, meal.imageVersion))}" alt="Photo de « ${escapeHtml(meal.title)} »" loading="lazy" />
-        </button>
-        <button type="button" class="icon-btn danger-hover meal-image-remove" data-action="remove-image" aria-label="Supprimer l'image">${icons.trash}</button>
-      </div>`
-    : `<button type="button" class="btn meal-image-add" data-action="add-image">${icons.image} Ajouter une photo</button>`;
+  const thumbs = meal.images
+    .map(
+      (imageId) => `
+        <div class="meal-image-item" data-image-id="${escapeHtml(imageId)}">
+          <button type="button" class="meal-image-view" data-action="view-image" data-image-id="${escapeHtml(imageId)}">
+            <img src="${escapeHtml(mealImageUrl(code, meal.id, imageId))}" alt="Photo de « ${escapeHtml(meal.title)} »" loading="lazy" />
+          </button>
+          <button type="button" class="icon-btn danger-hover meal-image-remove" data-action="remove-image" data-image-id="${escapeHtml(imageId)}" aria-label="Supprimer cette photo">${icons.trash}</button>
+        </div>`,
+    )
+    .join("");
+  const addBtn =
+    meal.images.length < MAX_IMAGES_PER_MEAL
+      ? `<button type="button" class="btn meal-image-add" data-action="add-image">${icons.image} Ajouter une photo</button>`
+      : "";
   return `
     <div class="meal-field meal-image-field">
-      <span class="meal-field-label">Photo</span>
-      ${content}
+      <span class="meal-field-label">Photos</span>
+      <div class="meal-image-gallery">${thumbs}</div>
+      ${addBtn}
       <span class="meal-image-loading" hidden><span class="spinner" aria-hidden="true"></span>Envoi…</span>
       <input type="file" class="meal-image-input" data-action="image-input" accept="${ALLOWED_IMAGE_TYPES.join(",")}" hidden />
     </div>`;
@@ -274,6 +446,14 @@ function mealCardHtml(
           <span class="meal-field-label">Temps de préparation</span>
           ${prepTimePickerHtml(meal.prepTime)}
         </div>
+        ${
+          archived
+            ? ""
+            : `<div class="meal-field">
+                <label class="meal-field-label" for="meal-planned-${escapeHtml(meal.id)}">Jour prévu</label>
+                <input type="date" id="meal-planned-${escapeHtml(meal.id)}" class="meal-planned-date" data-action="planned-date" value="${meal.plannedDate ? toDateInputValue(meal.plannedDate) : ""}" />
+              </div>`
+        }
         <div class="meal-field">
           <label class="meal-field-label" for="meal-comment-${escapeHtml(meal.id)}">Commentaire</label>
           <textarea id="meal-comment-${escapeHtml(meal.id)}" class="meal-comment" data-field="comment" placeholder="Une note sur ce repas…" rows="2" maxlength="${MAX_COMMENT_LENGTH}">${escapeHtml(meal.comment)}</textarea>
@@ -347,6 +527,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
 
       <nav class="tabs" id="tabs">
         <button type="button" class="tab-btn" data-tab="active" aria-pressed="true">Repas</button>
+        <button type="button" class="tab-btn" data-tab="planning" aria-pressed="false">${icons.calendar} Planning</button>
         <button type="button" class="tab-btn" data-tab="archive" aria-pressed="false">${icons.history} Historique</button>
       </nav>
 
@@ -359,10 +540,31 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <ul class="add-suggestions" id="add-suggestions" aria-label="Repas déjà faits" hidden></ul>
       </section>
 
-      <section class="card search-card" id="search-card" hidden>
-        <label class="sr-only" for="archive-search">Rechercher dans l'historique</label>
-        <input id="archive-search" type="search" placeholder="Rechercher dans l'historique…" autocomplete="off" />
+      <section class="card filter-card" id="filter-card">
+        <button type="button" class="btn-link" id="filter-toggle-btn" aria-pressed="false">Filtrer</button>
+        <div class="filter-panel" id="filter-panel" hidden>
+          <div class="filter-group">
+            <span class="meal-field-label">Statut</span>
+            <div id="filter-status-pills"></div>
+          </div>
+          <div class="filter-group">
+            <span class="meal-field-label">Temps de préparation</span>
+            <div id="filter-preptime-pills"></div>
+          </div>
+          <button type="button" class="btn-link filter-reset-btn" id="filter-reset-btn" hidden>Réinitialiser les filtres</button>
+        </div>
       </section>
+
+      <section class="card search-card" id="search-card" hidden>
+        <div class="search-row">
+          <label class="sr-only" for="archive-search">Rechercher dans l'historique</label>
+          <input id="archive-search" type="search" placeholder="Rechercher dans l'historique…" autocomplete="off" />
+          <button type="button" class="btn-link" id="stats-toggle-btn" aria-pressed="false">Statistiques</button>
+        </div>
+        <div class="stats-panel" id="stats-panel" hidden></div>
+      </section>
+
+      <div class="card planning-view" id="planning-view" hidden></div>
 
       <ul class="meal-list" id="meal-list"></ul>
       <p class="empty-message" id="empty-message" hidden></p>
@@ -378,8 +580,18 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   let notFound = false;
   let loadError = false;
   let shellMounted = false;
-  let tab: "active" | "archive" = "active";
+  let tab: "active" | "planning" | "archive" = "active";
   let archiveQuery = "";
+  // Filtres de la liste active (voir wireFilters/visibleMeals) : un
+  // ensemble vide signifie "pas de filtre", pas "tout exclure". Purement en
+  // mémoire (pas persisté, contrairement à sortByStatus) : contrairement à
+  // une préférence d'appareil, un filtre a vocation à être remis à zéro
+  // d'une visite à l'autre.
+  const activeStatusFilters = new Set<MealStatus>();
+  const activePrepTimeFilters = new Set<PrepTime>();
+  // Semaine affichée dans l'onglet Planning (voir renderPlanning) : le lundi
+  // de la semaine courante par défaut.
+  let weekStart = startOfWeek(Date.now());
   // Préférence propre à cet appareil (voir src/lib/sortPreference.ts) : trie
   // la liste active par statut plutôt que par ordre manuel. Le glisser-
   // déposer et les boutons monter/descendre (voir wireMealList/moveMeal)
@@ -465,6 +677,8 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       wireHeader();
       wireAddForm();
       wireSearch();
+      wireStats();
+      wireFilters();
       wireTabs();
       wireToolbar();
       wireMealList();
@@ -538,18 +752,26 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     }
   }
 
+  function activateTab(next: "active" | "planning" | "archive"): void {
+    tab = next;
+    root.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tab === tab)));
+    const addCard = root.querySelector("#add-meal-card") as HTMLElement | null;
+    if (addCard) addCard.hidden = tab !== "active";
+    const filterCard = root.querySelector("#filter-card") as HTMLElement | null;
+    if (filterCard) filterCard.hidden = tab !== "active";
+    const searchCard = root.querySelector("#search-card") as HTMLElement | null;
+    if (searchCard) searchCard.hidden = tab !== "archive";
+    const mealListEl = root.querySelector("#meal-list") as HTMLElement | null;
+    if (mealListEl) mealListEl.hidden = tab === "planning";
+    const planningView = root.querySelector("#planning-view") as HTMLElement | null;
+    if (planningView) planningView.hidden = tab !== "planning";
+    updateSortToggleBtn();
+    renderMeals();
+  }
+
   function wireTabs(): void {
     root.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        tab = btn.dataset.tab as "active" | "archive";
-        root.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
-        const addCard = root.querySelector("#add-meal-card") as HTMLElement | null;
-        if (addCard) addCard.hidden = tab !== "active";
-        const searchCard = root.querySelector("#search-card") as HTMLElement | null;
-        if (searchCard) searchCard.hidden = tab !== "archive";
-        updateSortToggleBtn();
-        renderMeals();
-      });
+      btn.addEventListener("click", () => activateTab(btn.dataset.tab as "active" | "planning" | "archive"));
     });
   }
 
@@ -569,6 +791,79 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       archiveQuery = (e.target as HTMLInputElement).value;
       renderMeals();
     });
+  }
+
+  function wireStats(): void {
+    const toggleBtn = root.querySelector("#stats-toggle-btn") as HTMLButtonElement | null;
+    const panel = root.querySelector("#stats-panel") as HTMLElement | null;
+    toggleBtn?.addEventListener("click", () => {
+      if (!panel) return;
+      panel.hidden = !panel.hidden;
+      toggleBtn.setAttribute("aria-pressed", String(!panel.hidden));
+      if (!panel.hidden) updateStatsPanel();
+    });
+  }
+
+  /** Recalculée à chaque rendu (voir renderMeals) plutôt qu'une fois pour
+   * toutes : les statistiques doivent refléter l'historique à jour, y
+   * compris quand un autre appareil archive un repas pendant que le panneau
+   * est ouvert. Inutile tant qu'il est masqué. */
+  function updateStatsPanel(): void {
+    const panel = root.querySelector("#stats-panel") as HTMLElement | null;
+    if (!panel || panel.hidden || !state) return;
+    panel.innerHTML = historyStatsHtml(state.archive);
+  }
+
+  /** Filtres de la liste active (statut, temps de préparation) : multi-
+   * sélection, purement client (voir activeStatusFilters/activePrepTimeFilters) —
+   * contrairement au tri par statut (sortByStatus), rien n'est envoyé au
+   * serveur. */
+  function wireFilters(): void {
+    const toggleBtn = root.querySelector("#filter-toggle-btn") as HTMLButtonElement | null;
+    const panel = root.querySelector("#filter-panel") as HTMLElement | null;
+    toggleBtn?.addEventListener("click", () => {
+      if (!panel) return;
+      panel.hidden = !panel.hidden;
+      toggleBtn.setAttribute("aria-pressed", String(!panel.hidden));
+    });
+    root.querySelector("#filter-reset-btn")?.addEventListener("click", () => {
+      activeStatusFilters.clear();
+      activePrepTimeFilters.clear();
+      renderFilterPickers();
+      renderMeals();
+    });
+    renderFilterPickers();
+  }
+
+  function renderFilterPickers(): void {
+    const statusEl = root.querySelector("#filter-status-pills") as HTMLElement | null;
+    if (statusEl) {
+      statusEl.innerHTML = filterStatusPickerHtml(activeStatusFilters);
+      statusEl.querySelectorAll<HTMLButtonElement>(".filter-status-pill").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const status = btn.dataset.status as MealStatus;
+          if (activeStatusFilters.has(status)) activeStatusFilters.delete(status);
+          else activeStatusFilters.add(status);
+          renderFilterPickers();
+          renderMeals();
+        });
+      });
+    }
+    const prepEl = root.querySelector("#filter-preptime-pills") as HTMLElement | null;
+    if (prepEl) {
+      prepEl.innerHTML = filterPrepTimePickerHtml(activePrepTimeFilters);
+      prepEl.querySelectorAll<HTMLButtonElement>(".filter-preptime-pill").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const prepTime = btn.dataset.preptime as PrepTime;
+          if (activePrepTimeFilters.has(prepTime)) activePrepTimeFilters.delete(prepTime);
+          else activePrepTimeFilters.add(prepTime);
+          renderFilterPickers();
+          renderMeals();
+        });
+      });
+    }
+    const resetBtn = root.querySelector("#filter-reset-btn") as HTMLButtonElement | null;
+    if (resetBtn) resetBtn.hidden = activeStatusFilters.size === 0 && activePrepTimeFilters.size === 0;
   }
 
   function wireToolbar(): void {
@@ -733,17 +1028,31 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * par statut (voir sortByStatus) — au choix, jamais les deux à la fois. */
   function visibleMeals(): Meal[] {
     if (!state) return [];
+    if (tab === "planning") return [];
     const query = archiveQuery.trim().toLowerCase();
-    if (tab !== "active") {
+    if (tab === "archive") {
       return query ? state.archive.filter((m) => m.title.toLowerCase().includes(query)) : state.archive;
     }
+    let meals = state.meals;
+    if (activeStatusFilters.size > 0) meals = meals.filter((m) => activeStatusFilters.has(m.status));
+    if (activePrepTimeFilters.size > 0) meals = meals.filter((m) => m.prepTime !== null && activePrepTimeFilters.has(m.prepTime));
     return sortByStatus
-      ? [...state.meals].sort((a, b) => MEAL_STATUSES.indexOf(a.status) - MEAL_STATUSES.indexOf(b.status) || a.order - b.order)
-      : [...state.meals].sort((a, b) => a.order - b.order);
+      ? [...meals].sort((a, b) => MEAL_STATUSES.indexOf(a.status) - MEAL_STATUSES.indexOf(b.status) || a.order - b.order)
+      : [...meals].sort((a, b) => a.order - b.order);
   }
 
   function renderMeals(): void {
     if (!state) return;
+
+    if (tab === "planning") {
+      const emptyEl = root.querySelector("#empty-message") as HTMLElement | null;
+      if (emptyEl) emptyEl.hidden = true;
+      const toggleAllBtn = root.querySelector("#toggle-all-btn") as HTMLButtonElement | null;
+      if (toggleAllBtn) toggleAllBtn.hidden = true;
+      renderPlanning();
+      return;
+    }
+
     if (dragging) return;
     const listEl = root.querySelector("#meal-list") as HTMLElement | null;
     const emptyEl = root.querySelector("#empty-message") as HTMLElement | null;
@@ -757,7 +1066,9 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       emptyEl.hidden = false;
       emptyEl.textContent =
         tab === "active"
-          ? "Aucun repas pour l'instant. Ajoute une idée ci-dessus !"
+          ? state.meals.length === 0
+            ? "Aucun repas pour l'instant. Ajoute une idée ci-dessus !"
+            : "Aucun repas ne correspond aux filtres."
           : query
             ? "Aucun repas ne correspond à la recherche."
             : "Aucun repas dans l'historique pour le moment.";
@@ -772,6 +1083,33 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       const allExpanded = meals.length > 0 && meals.every((m) => expandedIds.has(m.id));
       toggleAllBtn.textContent = allExpanded ? "Tout replier" : "Tout déplier";
     }
+
+    if (tab === "archive") updateStatsPanel();
+  }
+
+  function renderPlanning(): void {
+    const container = root.querySelector("#planning-view") as HTMLElement | null;
+    if (!container || !state) return;
+    container.innerHTML = planningHtml(state.meals, weekStart);
+    container.querySelector("#planning-prev")?.addEventListener("click", () => {
+      weekStart = addDays(weekStart, -7);
+      renderPlanning();
+    });
+    container.querySelector("#planning-next")?.addEventListener("click", () => {
+      weekStart = addDays(weekStart, 7);
+      renderPlanning();
+    });
+    container.querySelector("#planning-today-btn")?.addEventListener("click", () => {
+      weekStart = startOfWeek(Date.now());
+      renderPlanning();
+    });
+    container.querySelectorAll<HTMLButtonElement>('[data-action="unplan"]').forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const li = btn.closest<HTMLLIElement>(".planning-entry");
+        const id = li?.dataset.id;
+        if (id) conn.send({ type: "setMealPlannedDate", id, plannedDate: null });
+      });
+    });
   }
 
   /** Id du repas dont un champ texte (titre/source en édition en ligne, ou
@@ -905,6 +1243,12 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       });
     });
 
+    card.querySelector<HTMLInputElement>('[data-action="planned-date"]')?.addEventListener("change", (e) => {
+      const value = (e.target as HTMLInputElement).value;
+      const plannedDate = value ? fromDateInputValue(value) : null;
+      conn.send({ type: "setMealPlannedDate", id, plannedDate });
+    });
+
     card.querySelectorAll<HTMLButtonElement>(".status-pill").forEach((btn) => {
       btn.addEventListener("click", () => {
         const status = btn.dataset.status as MealStatus;
@@ -964,19 +1308,19 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       conn.send({ type: "restoreMeal", id });
     });
 
-    wireMealImage(card, id);
+    wireMealImage(card, id, meal);
   }
 
-  /** Ajout/remplacement d'une photo (input file ou collage — ex : capture
-   * d'écran) et suppression. Pas de mise à jour optimiste : comme pour le
-   * reste de l'app, l'aperçu ne se met à jour qu'au retour de l'état par le
-   * serveur (ici via la diffusion websocket déclenchée par l'upload, voir
-   * worker/index.ts), l'appel HTTP se contentant de confirmer/rejeter
-   * l'envoi lui-même. */
-  function wireMealImage(card: HTMLLIElement, id: string): void {
+  /** Ajout (jusqu'à MAX_IMAGES_PER_MEAL, input file ou collage — ex :
+   * capture d'écran) et suppression individuelle d'une photo. Pas de mise à
+   * jour optimiste : comme pour le reste de l'app, la galerie ne se met à
+   * jour qu'au retour de l'état par le serveur (ici via la diffusion
+   * websocket déclenchée par l'upload, voir worker/index.ts), l'appel HTTP
+   * se contentant de confirmer/rejeter l'envoi lui-même. */
+  function wireMealImage(card: HTMLLIElement, id: string, meal: Meal): void {
     // Le champ reste inerte pendant l'envoi (le seul retour serait sinon
     // l'attente réseau elle-même, qui donne l'impression d'un blocage) :
-    // boutons désactivés, aperçu/bouton d'ajout estompés, indicateur visible.
+    // boutons désactivés, galerie/bouton d'ajout estompés, indicateur visible.
     function setLoading(loading: boolean): void {
       card.querySelector(".meal-image-field")?.classList.toggle("is-loading", loading);
       card.querySelectorAll<HTMLButtonElement>(".meal-image-field button").forEach((btn) => {
@@ -987,6 +1331,10 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     }
 
     async function send(file: File | Blob): Promise<void> {
+      if (meal.images.length >= MAX_IMAGES_PER_MEAL) {
+        showToast(`Maximum ${MAX_IMAGES_PER_MEAL} photos par repas.`);
+        return;
+      }
       if (!(ALLOWED_IMAGE_TYPES as readonly string[]).includes(file.type)) {
         showToast("Format d'image non supporté (PNG, JPEG, WebP ou GIF).");
         return;
@@ -1015,25 +1363,31 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       input.value = "";
     });
 
-    card.querySelector<HTMLButtonElement>('[data-action="view-image"]')?.addEventListener("click", () => {
-      const img = card.querySelector<HTMLImageElement>(".meal-image-preview img");
-      if (img) openImageLightbox(img.src, img.alt);
+    card.querySelectorAll<HTMLButtonElement>('[data-action="view-image"]').forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const images = meal.images.map((imageId) => ({
+          url: mealImageUrl(code, id, imageId),
+          alt: `Photo de « ${meal.title} »`,
+        }));
+        const startIndex = meal.images.indexOf(btn.dataset.imageId ?? "");
+        openImageLightbox(images, startIndex === -1 ? 0 : startIndex);
+      });
     });
 
-    const removeBtn = card.querySelector<HTMLButtonElement>('[data-action="remove-image"]');
-    if (removeBtn) {
+    card.querySelectorAll<HTMLButtonElement>('[data-action="remove-image"]').forEach((removeBtn) => {
       wireConfirmClick(removeBtn, {
         armedLabel: "Confirmer la suppression ?",
         onConfirm: () => {
+          const imageId = removeBtn.dataset.imageId!;
           setLoading(true);
-          deleteMealImage(code, id)
+          deleteMealImage(code, id, imageId)
             .catch((err) => {
               showToast(err instanceof ApiError ? err.message : "Erreur réseau, réessaie.");
             })
             .finally(() => setLoading(false));
         },
       });
-    }
+    });
 
     // Coller une image (ex : capture d'écran) pendant que la carte est
     // dépliée l'envoie directement, sans passer par le sélecteur de
