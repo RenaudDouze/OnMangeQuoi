@@ -51,6 +51,14 @@ function sourceHtml(source: string): string {
   return escapeHtml(source);
 }
 
+/** Les libellés (voir MEAL_STATUS_LABELS/MEAL_NOTE_LABELS) sont toujours
+ * "emoji + espace + texte" : l'emoji seul sert de badge compact (voir
+ * mealCardHtml) sans reprendre le texte complet, trop large une fois la
+ * carte repliée. */
+function firstEmoji(label: string): string {
+  return label.split(" ")[0];
+}
+
 function statusPickerHtml(selected: MealStatus): string {
   const pills = MEAL_STATUSES.map(
     (s) =>
@@ -407,6 +415,15 @@ function mealCardHtml(
     ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
     : statusPickerHtml(meal.status);
 
+  // Repère visible même carte repliée (voir aussi colorAttr plus bas, dont
+  // le seul liséré de couleur s'est révélé insuffisant en pratique pour
+  // distinguer le statut d'un coup d'œil) : l'emoji du statut (ou de la
+  // note une fois archivé, si renseignée) plutôt que le libellé complet,
+  // qui prendrait trop de place une fois la carte repliée.
+  const badgeLabel = archived ? (meal.note ? MEAL_NOTE_LABELS[meal.note] : "Fait") : MEAL_STATUS_LABELS[meal.status];
+  const badgeEmoji = archived ? (meal.note ? firstEmoji(MEAL_NOTE_LABELS[meal.note]) : "🎉") : firstEmoji(MEAL_STATUS_LABELS[meal.status]);
+  const statusBadge = `<span class="meal-status-badge" role="img" aria-label="${escapeHtml(badgeLabel)}" title="${escapeHtml(badgeLabel)}">${badgeEmoji}</span>`;
+
   // Repliée, la carte ne garde que l'action la plus utile depuis l'historique
   // (remettre en liste) ; les suppressions, destructives et rares, n'ont pas
   // besoin d'être à portée de tap en permanence — elles n'apparaissent
@@ -465,9 +482,10 @@ function mealCardHtml(
 
   // Repère de couleur sur le bord gauche de la carte (voir style.css,
   // .meal-card[data-status]/[data-note]) : statut pour un repas en cours,
-  // note (si renseignée) pour un repas de l'historique. Remplace un ancien
-  // emoji dédié, qui prenait trop de place une fois la carte repliée — un
-  // simple liséré suffit à donner le même repère en un coup d'œil.
+  // note (si renseignée) pour un repas de l'historique — en complément de
+  // statusBadge ci-dessus (emoji), pas à sa place : un simple liséré s'est
+  // révélé insuffisant seul pour distinguer le statut d'un coup d'œil,
+  // notamment carte repliée.
   // Échappés bien que le reducer serveur valide déjà status/note contre les
   // enums attendues (voir worker/reducer.ts) : ce sont deux couches
   // indépendantes, pas l'une à la place de l'autre — un attribut HTML non
@@ -492,6 +510,7 @@ function mealCardHtml(
     <li class="meal-card${archived ? " archived" : ""}${expanded ? " expanded" : ""}" data-id="${escapeHtml(meal.id)}"${colorAttr}>
       <div class="meal-main" data-action="toggle-row">
         ${toggleBtn}
+        ${statusBadge}
         <h3 class="meal-title" data-action="edit-title" role="button" tabindex="0">${escapeHtml(meal.title)}</h3>
         <div class="meal-controls">${restoreBtn}${moveButtons}</div>
       </div>

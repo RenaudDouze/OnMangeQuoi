@@ -815,6 +815,18 @@ button:focus-visible,
   background: var(--checked-bg);
 }
 
+/* Repère de statut/note visible carte repliée (voir statusBadge dans
+   mealCardHtml) : le liséré de couleur du bord (.meal-card[data-status]/
+   [data-note]) seul s'est révélé insuffisant, un emoji distinct par valeur
+   se distingue mieux d'un coup d'œil, y compris en mode accessibilité
+   (agrandi comme le reste du texte, voir :root[data-a11y]) ou pour les
+   personnes daltoniennes. */
+.meal-status-badge {
+  flex-shrink: 0;
+  font-size: 1.1em;
+  line-height: 1;
+}
+
 .meal-controls {
   display: flex;
   align-items: center;
