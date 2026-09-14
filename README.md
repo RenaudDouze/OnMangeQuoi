@@ -26,8 +26,16 @@ de données externe).
 - **Réordonnancement** : glisser-déposer les repas de la liste active par
   leur poignée (fusionnée avec le chevron replier/déplier), au doigt comme
   à la souris.
-- **Image** : une photo (ou une capture d'écran collée directement) par
-  repas, stockée sur R2, affichable en plein écran.
+- **Filtres** : la liste active peut être filtrée par statut et/ou par temps
+  de préparation.
+- **Statistiques** : un panneau dans l'onglet Historique résume les repas
+  archivés (répartition par note, par temps de préparation, repas les plus
+  refaits).
+- **Planning** : un onglet dédié affiche les repas actifs sur une grille
+  semaine (jour prévu réglable depuis la carte du repas), navigable semaine
+  par semaine.
+- **Photos** : jusqu'à 10 photos (ou captures d'écran collées directement)
+  par repas, stockées sur R2, affichables en plein écran avec navigation.
 - **Thème clair/sombre/auto**, et **mode accessibilité** (texte et zones
   cliquables agrandis, contraste renforcé, animations réduites).
 - **Installable (PWA)** : manifest + service worker, s'ajoute à l'écran
@@ -163,8 +171,8 @@ envoyées en WebSocket sous forme de petits messages typés
 (`shared/types.ts`), appliquées côté serveur, persistées puis rediffusées à
 tous les clients connectés.
 
-Les images ne sont pas dans ce JSON : elles sont stockées à part, sur R2, une
-par repas (un nouvel envoi remplace la précédente). Un repas ne garde qu'un
-indicateur de présence et un numéro de version ; l'upload/la suppression
-passent par une route HTTP dédiée plutôt que le WebSocket, mais rejoignent
-ensuite le même mécanisme (appliquées puis rediffusées à tous).
+Les images ne sont pas dans ce JSON : elles sont stockées à part, sur R2,
+jusqu'à 10 par repas. Un repas ne garde qu'une liste d'ids de photos
+(permanents, jamais réutilisés pour un contenu différent) ; l'upload/la
+suppression passent par une route HTTP dédiée plutôt que le WebSocket, mais
+rejoignent ensuite le même mécanisme (appliquées puis rediffusées à tous).

@@ -9,6 +9,7 @@ import {
   MAX_SOURCE_LENGTH,
   MAX_COMMENT_LENGTH,
   MAX_MEALS_TOTAL,
+  MAX_IMAGES_PER_MEAL,
   MEAL_STATUSES,
   MEAL_NOTES,
   PREP_TIMES,
@@ -37,6 +38,41 @@ export function prevOrder(list: { order: number }[]): number {
 
 function findMeal(state: ListState, id: string): Meal | undefined {
   return state.meals.find((m) => m.id === id) ?? state.archive.find((m) => m.id === id);
+}
+
+/** Migre en douceur une ListState chargée depuis le stockage d'une liste
+ * créée avant l'ajout des photos multiples : à l'époque, un repas portait
+ * `hasImage: boolean` + `imageVersion: number` (une seule photo, écrasée à
+ * chaque remplacement) au lieu de `images: string[]`. Appelée par
+ * mealRoom.ts juste après le chargement, avant toute autre opération —
+ * cette app étant déjà déployée avec de vraies listes, une lecture qui
+ * suppose `images` déjà présent planterait sinon sur toute liste plus
+ * ancienne que ce changement.
+ *
+ * L'ancienne image unique vivait sur R2 à la clé `meals/<code>/<mealId>`
+ * (voir worker/index.ts) : plutôt que de la copier vers une nouvelle clé,
+ * on réutilise l'id du repas lui-même comme id de cette image migrée —
+ * `mealImageKey` (worker/index.ts) sait reconnaître ce cas particulier et
+ * retrouver l'objet à son ancien emplacement, sans déplacement de données.
+ *
+ * Idempotente (un repas dont `images` est déjà un tableau n'est pas
+ * retouché) : sans coût à rappeler à chaque chargement d'une liste déjà
+ * migrée, la grande majorité une fois ce changement déployé. Retourne
+ * `true` si quelque chose a été migré, pour éviter une écriture de
+ * stockage inutile côté appelant. */
+export function migrateMealImages(state: ListState): boolean {
+  let migrated = false;
+  const migrateOne = (meal: Meal): void => {
+    const legacy = meal as unknown as { images?: unknown; hasImage?: boolean; imageVersion?: number };
+    if (Array.isArray(legacy.images)) return;
+    meal.images = legacy.hasImage ? [meal.id] : [];
+    delete legacy.hasImage;
+    delete legacy.imageVersion;
+    migrated = true;
+  };
+  state.meals.forEach(migrateOne);
+  state.archive.forEach(migrateOne);
+  return migrated;
 }
 
 /** Mutates `state` in place to apply one client message.
@@ -77,9 +113,9 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
         createdAt: now,
         updatedAt: now,
         doneAt: null,
-        hasImage: false,
-        imageVersion: 0,
+        images: [],
         prepTime: null,
+        plannedDate: null,
       };
       state.meals.push(meal);
       return;
@@ -142,24 +178,42 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       return;
     }
 
+    case "setMealPlannedDate": {
+      const meal = findMeal(state, msg.id);
+      if (!meal) return;
+      meal.plannedDate = msg.plannedDate;
+      meal.updatedAt = now;
+      return;
+    }
+
     // Émis par le worker (pas directement par un client) une fois l'upload
-    // ou la suppression de l'image effectivement passée en R2 — voir
-    // worker/index.ts. imageVersion s'incrémente à chaque fois, y compris
-    // à la suppression, pour invalider un cache navigateur qui aurait
-    // gardé l'URL avec l'ancienne version.
+    // effectivement passé en R2 — voir worker/index.ts, qui génère lui-même
+    // un imageId frais avant d'appeler cette route interne.
     //
     // Rejeté si le message arrive directement du WebSocket public (internal
     // à false) : sans ce contrôle, n'importe qui ayant le code pourrait
-    // déclarer hasImage=true sans jamais avoir rien envoyé à R2 — la carte
-    // afficherait alors une image cassée pour tout le monde, et le
-    // compteur imageVersion (qui invalide le cache navigateur) dériverait
-    // sans rapport avec de vrais remplacements d'image.
-    case "setMealImage": {
+    // déclarer une photo présente sans jamais avoir rien envoyé à R2 — la
+    // carte afficherait alors une image cassée pour tout le monde.
+    case "addMealImage": {
       if (!internal) return;
       const meal = findMeal(state, msg.id);
       if (!meal) return;
-      meal.hasImage = msg.hasImage;
-      meal.imageVersion += 1;
+      // Même borne que MAX_MEALS_TOTAL (voir "addMeal") et pour la même
+      // raison : sans authentification, rien d'autre n'empêche un client
+      // d'accumuler des photos indéfiniment sur un seul repas.
+      if (meal.images.length >= MAX_IMAGES_PER_MEAL) return;
+      meal.images.push(msg.imageId);
+      meal.updatedAt = now;
+      return;
+    }
+
+    // Même parade que "addMealImage" : rejoué uniquement via /apply, après
+    // que le worker a effectivement supprimé l'objet R2 correspondant.
+    case "removeMealImage": {
+      if (!internal) return;
+      const meal = findMeal(state, msg.id);
+      if (!meal) return;
+      meal.images = meal.images.filter((imageId) => imageId !== msg.imageId);
       meal.updatedAt = now;
       return;
     }

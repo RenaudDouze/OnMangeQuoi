@@ -1,7 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { applyMessage, nextOrder, prevOrder } from "./reducer";
+import { applyMessage, nextOrder, prevOrder, migrateMealImages } from "./reducer";
 import type { ListState, Meal } from "../shared/types";
-import { MAX_TITLE_LENGTH, MAX_LIST_NAME_LENGTH, MAX_SOURCE_LENGTH, MAX_COMMENT_LENGTH, MAX_MEALS_TOTAL } from "../shared/types";
+import {
+  MAX_TITLE_LENGTH,
+  MAX_LIST_NAME_LENGTH,
+  MAX_SOURCE_LENGTH,
+  MAX_COMMENT_LENGTH,
+  MAX_MEALS_TOTAL,
+  MAX_IMAGES_PER_MEAL,
+} from "../shared/types";
 
 function makeState(overrides: Partial<ListState> = {}): ListState {
   return {
@@ -29,9 +36,9 @@ function makeMeal(overrides: Partial<Meal> = {}): Meal {
     createdAt: NOW,
     updatedAt: NOW,
     doneAt: null,
-    hasImage: false,
-    imageVersion: 0,
+    images: [],
     prepTime: null,
+    plannedDate: null,
     ...overrides,
   };
 }
@@ -98,9 +105,9 @@ describe("applyMessage: addMeal", () => {
         createdAt: NOW,
         updatedAt: NOW,
         doneAt: null,
-        hasImage: false,
-        imageVersion: 0,
+        images: [],
         prepTime: null,
+        plannedDate: null,
       },
     ]);
   });
@@ -200,9 +207,9 @@ describe("applyMessage: updateMeal", () => {
           createdAt: NOW,
           updatedAt: NOW,
           doneAt: NOW,
-          hasImage: false,
-          imageVersion: 0,
+          images: [],
           prepTime: null,
+          plannedDate: null,
         },
       ],
     });
@@ -395,38 +402,67 @@ describe("applyMessage: setMealPrepTime", () => {
   });
 });
 
-describe("applyMessage: setMealImage", () => {
-  it("pose une image sur un repas actif et incrémente imageVersion", () => {
+describe("applyMessage: setMealPlannedDate", () => {
+  it("planifie un repas actif à une date", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 1, true);
-    expect(state.meals[0].hasImage).toBe(true);
-    expect(state.meals[0].imageVersion).toBe(1);
+    applyMessage(state, { type: "setMealPlannedDate", id: "m1", plannedDate: NOW + 86_400_000 }, NOW + 1);
+    expect(state.meals[0].plannedDate).toBe(NOW + 86_400_000);
     expect(state.meals[0].updatedAt).toBe(NOW + 1);
   });
 
-  it("incrémente imageVersion à chaque remplacement, y compris à la suppression", () => {
+  it("peut effacer une date planifiée (null)", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 1, true);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 2, true);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: false }, NOW + 3, true);
-    expect(state.meals[0].hasImage).toBe(false);
-    expect(state.meals[0].imageVersion).toBe(3);
-  });
-
-  it("peut poser une image sur un repas archivé", () => {
-    const state = makeState();
-    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
-    applyMessage(state, { type: "setMealStatus", id: "m1", status: "fait" }, NOW + 1);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 2, true);
-    expect(state.archive[0].hasImage).toBe(true);
-    expect(state.archive[0].imageVersion).toBe(1);
+    applyMessage(state, { type: "setMealPlannedDate", id: "m1", plannedDate: NOW }, NOW + 1);
+    applyMessage(state, { type: "setMealPlannedDate", id: "m1", plannedDate: null }, NOW + 2);
+    expect(state.meals[0].plannedDate).toBeNull();
   });
 
   it("ignore un id inconnu", () => {
     const state = makeState();
-    applyMessage(state, { type: "setMealImage", id: "ghost", hasImage: true }, NOW, true);
+    applyMessage(state, { type: "setMealPlannedDate", id: "ghost", plannedDate: NOW }, NOW);
+    expect(state.meals).toEqual([]);
+  });
+
+  it("planifie le bon repas actif quand plusieurs existent", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "A" }, NOW);
+    applyMessage(state, { type: "addMeal", id: "m2", title: "B" }, NOW);
+    applyMessage(state, { type: "setMealPlannedDate", id: "m2", plannedDate: NOW }, NOW + 1);
+    expect(state.meals.find((m) => m.id === "m1")!.plannedDate).toBeNull();
+    expect(state.meals.find((m) => m.id === "m2")!.plannedDate).toBe(NOW);
+  });
+});
+
+describe("applyMessage: addMealImage", () => {
+  it("ajoute une photo à un repas actif", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "addMealImage", id: "m1", imageId: "img1" }, NOW + 1, true);
+    expect(state.meals[0].images).toEqual(["img1"]);
+    expect(state.meals[0].updatedAt).toBe(NOW + 1);
+  });
+
+  it("accumule plusieurs photos, dans l'ordre d'ajout", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "addMealImage", id: "m1", imageId: "img1" }, NOW + 1, true);
+    applyMessage(state, { type: "addMealImage", id: "m1", imageId: "img2" }, NOW + 2, true);
+    expect(state.meals[0].images).toEqual(["img1", "img2"]);
+  });
+
+  it("peut ajouter une photo à un repas archivé", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "setMealStatus", id: "m1", status: "fait" }, NOW + 1);
+    applyMessage(state, { type: "addMealImage", id: "m1", imageId: "img1" }, NOW + 2, true);
+    expect(state.archive[0].images).toEqual(["img1"]);
+  });
+
+  it("ignore un id inconnu", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMealImage", id: "ghost", imageId: "img1" }, NOW, true);
     expect(state.meals).toEqual([]);
     expect(state.archive).toEqual([]);
   });
@@ -434,9 +470,81 @@ describe("applyMessage: setMealImage", () => {
   it("ignore un message reçu directement (pas rejoué via la route interne /apply)", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
-    applyMessage(state, { type: "setMealImage", id: "m1", hasImage: true }, NOW + 1);
-    expect(state.meals[0].hasImage).toBe(false);
-    expect(state.meals[0].imageVersion).toBe(0);
+    applyMessage(state, { type: "addMealImage", id: "m1", imageId: "img1" }, NOW + 1);
+    expect(state.meals[0].images).toEqual([]);
+  });
+
+  it("ignore l'ajout au-delà de MAX_IMAGES_PER_MEAL photos", () => {
+    const state = makeState({
+      meals: [makeMeal({ id: "m1", images: Array.from({ length: MAX_IMAGES_PER_MEAL }, (_, i) => `img${i}`) })],
+    });
+    applyMessage(state, { type: "addMealImage", id: "m1", imageId: "trop" }, NOW, true);
+    expect(state.meals[0].images).toHaveLength(MAX_IMAGES_PER_MEAL);
+    expect(state.meals[0].images).not.toContain("trop");
+  });
+});
+
+describe("applyMessage: removeMealImage", () => {
+  it("retire une photo d'un repas actif", () => {
+    const state = makeState({ meals: [makeMeal({ id: "m1", images: ["img1", "img2"] })] });
+    applyMessage(state, { type: "removeMealImage", id: "m1", imageId: "img1" }, NOW + 1, true);
+    expect(state.meals[0].images).toEqual(["img2"]);
+    expect(state.meals[0].updatedAt).toBe(NOW + 1);
+  });
+
+  it("ignore un id de repas inconnu", () => {
+    const state = makeState();
+    applyMessage(state, { type: "removeMealImage", id: "ghost", imageId: "img1" }, NOW, true);
+    expect(state.meals).toEqual([]);
+  });
+
+  it("ignore un message reçu directement (pas rejoué via la route interne /apply)", () => {
+    const state = makeState({ meals: [makeMeal({ id: "m1", images: ["img1"] })] });
+    applyMessage(state, { type: "removeMealImage", id: "m1", imageId: "img1" }, NOW + 1);
+    expect(state.meals[0].images).toEqual(["img1"]);
+  });
+});
+
+/** Simule un repas tel que persisté par une liste créée avant l'ajout des
+ * photos multiples : `images` n'existe pas, `hasImage`/`imageVersion` à la
+ * place (voir migrateMealImages dans reducer.ts). Le cast est nécessaire et
+ * volontaire — c'est exactement le genre de valeur "d'avant" que la
+ * migration doit savoir gérer sans planter. */
+function legacyMeal(overrides: Partial<Meal> & { hasImage: boolean; imageVersion?: number } = { hasImage: false }): Meal {
+  const meal = makeMeal(overrides) as unknown as Record<string, unknown>;
+  delete meal.images;
+  meal.hasImage = overrides.hasImage;
+  meal.imageVersion = overrides.imageVersion ?? 0;
+  return meal as unknown as Meal;
+}
+
+describe("migrateMealImages", () => {
+  it("convertit hasImage=true en un tableau images contenant l'id du repas", () => {
+    const state = makeState({ meals: [legacyMeal({ id: "m1", hasImage: true, imageVersion: 3 })] });
+    const migrated = migrateMealImages(state);
+    expect(migrated).toBe(true);
+    expect(state.meals[0].images).toEqual(["m1"]);
+    expect(state.meals[0]).not.toHaveProperty("hasImage");
+    expect(state.meals[0]).not.toHaveProperty("imageVersion");
+  });
+
+  it("convertit hasImage=false en tableau vide", () => {
+    const state = makeState({ meals: [legacyMeal({ id: "m1", hasImage: false })] });
+    migrateMealImages(state);
+    expect(state.meals[0].images).toEqual([]);
+  });
+
+  it("migre aussi les repas archivés", () => {
+    const state = makeState({ archive: [legacyMeal({ id: "m1", status: "fait", hasImage: true })] });
+    migrateMealImages(state);
+    expect(state.archive[0].images).toEqual(["m1"]);
+  });
+
+  it("ne retouche pas un repas déjà migré (idempotent), et signale l'absence de migration", () => {
+    const state = makeState({ meals: [makeMeal({ id: "m1", images: ["img1"] })] });
+    const migrated = migrateMealImages(state);
+    expect(migrated).toBe(false);
+    expect(state.meals[0].images).toEqual(["img1"]);
   });
 });
 

@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { ListState, ClientMessage, ServerMessage } from "../shared/types";
 import { MAX_LIST_NAME_LENGTH } from "../shared/types";
-import { applyMessage } from "./reducer";
+import { applyMessage, migrateMealImages } from "./reducer";
 
 interface Env {
   MEAL_ROOM: DurableObjectNamespace<MealRoom>;
@@ -17,6 +17,12 @@ export class MealRoom extends DurableObject<Env> {
     if (this.loaded) return;
     this.listState = (await this.ctx.storage.get<ListState>(STORAGE_KEY)) ?? null;
     this.loaded = true;
+    // Migration en douceur pour les listes créées avant les photos
+    // multiples — voir la doc de migrateMealImages. Ne coûte une écriture
+    // que la première fois qu'une liste ancienne est chargée.
+    if (this.listState && migrateMealImages(this.listState)) {
+      await this.persist();
+    }
   }
 
   async fetch(request: Request): Promise<Response> {

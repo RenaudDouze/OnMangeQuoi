@@ -29,6 +29,17 @@ function normalizeCode(code: string): string {
   return code.trim().toUpperCase();
 }
 
+// Avant les photos multiples, une image vivait à la clé 2 segments
+// `meals/<code>/<mealId>` (une seule par repas). La migration (voir
+// migrateMealImages dans worker/reducer.ts) réutilise l'id du repas comme id
+// de cette image plutôt que de la copier vers une nouvelle clé — ce helper
+// reconnaît ce cas particulier (imageId === mealId) et retrouve l'objet à son
+// ancien emplacement, sans déplacement de données R2.
+function mealImageKey(code: string, mealId: string, imageId: string): string {
+  if (imageId === mealId) return `meals/${code}/${mealId}`;
+  return `meals/${code}/${mealId}/${imageId}`;
+}
+
 // Autorise l'appel depuis une origine différente (client servi par GitHub
 // Pages, Worker sur un domaine *.workers.dev distinct) : sans ces en-têtes,
 // le navigateur bloquerait les requêtes JSON avant même qu'elles partent.
@@ -145,13 +156,62 @@ export default {
       }
     }
 
-    const imageMatch = url.pathname.match(/^\/api\/lists\/([A-Za-z0-9]{4,10})\/meals\/([A-Za-z0-9_-]{1,64})\/image$/);
+    // Liste des photos d'un repas : POST pour en envoyer une nouvelle (id
+    // généré côté serveur).
+    const imagesMatch = url.pathname.match(/^\/api\/lists\/([A-Za-z0-9]{4,10})\/meals\/([A-Za-z0-9_-]{1,64})\/images$/);
+    if (imagesMatch && request.method === "POST") {
+      const code = normalizeCode(imagesMatch[1]);
+      const mealId = imagesMatch[2];
+
+      const ip = request.headers.get("CF-Connecting-IP");
+      if (ip) {
+        const { success } = await env.IMAGE_WRITE_RATE_LIMITER.limit({ key: ip });
+        if (!success) {
+          return jsonError("Trop de tentatives, réessaie dans une minute.", 429);
+        }
+      }
+
+      const contentType = request.headers.get("content-type") ?? "";
+      if (!(ALLOWED_IMAGE_TYPES as readonly string[]).includes(contentType)) {
+        return jsonError("Format d'image non supporté.", 415);
+      }
+      // Vérifie d'abord l'en-tête (rejet rapide sans lire le corps), puis
+      // la taille réelle une fois lue : l'en-tête n'est qu'une déclaration
+      // du client, pas une garantie.
+      const declaredLength = Number(request.headers.get("content-length") ?? "0");
+      if (declaredLength > MAX_IMAGE_BYTES) {
+        return jsonError("Image trop volumineuse (5 Mo max).", 413);
+      }
+      const bytes = await request.arrayBuffer();
+      if (bytes.byteLength > MAX_IMAGE_BYTES) {
+        return jsonError("Image trop volumineuse (5 Mo max).", 413);
+      }
+
+      // Un id frais et permanent, jamais réutilisé pour un contenu différent
+      // (voir Meal.images dans shared/types.ts) : plus besoin de numéro de
+      // version pour invalider le cache navigateur.
+      const imageId = crypto.randomUUID();
+      const key = mealImageKey(code, mealId, imageId);
+      await env.MEAL_IMAGES.put(key, bytes, { httpMetadata: { contentType } });
+
+      const stub = env.MEAL_ROOM.get(env.MEAL_ROOM.idFromName(code));
+      const res = await stub.fetch("https://list.internal/apply", {
+        method: "POST",
+        body: JSON.stringify({ type: "addMealImage", id: mealId, imageId }),
+        headers: { "content-type": "application/json" },
+      });
+      return jsonPassthrough(res);
+    }
+
+    // Une photo précise : GET pour la servir, DELETE pour la retirer.
+    const imageMatch = url.pathname.match(
+      /^\/api\/lists\/([A-Za-z0-9]{4,10})\/meals\/([A-Za-z0-9_-]{1,64})\/images\/([A-Za-z0-9_-]{1,64})$/,
+    );
     if (imageMatch) {
       const code = normalizeCode(imageMatch[1]);
       const mealId = imageMatch[2];
-      // Une seule image par repas : un nouvel upload écrase la précédente,
-      // pas besoin de suivre plusieurs clés ni de nettoyer les anciennes.
-      const key = `meals/${code}/${mealId}`;
+      const imageId = imageMatch[3];
+      const key = mealImageKey(code, mealId, imageId);
 
       if (request.method === "GET") {
         // Pas de limiteur dédié à la lecture d'image : réutilise celui de la
@@ -169,58 +229,31 @@ export default {
         return new Response(object.body, {
           headers: {
             "content-type": object.httpMetadata?.contentType ?? "application/octet-stream",
-            // L'URL change de version à chaque remplacement (voir
-            // imageVersion) : un cache long est donc sans risque de servir
-            // une image périmée.
+            // Un id d'image est permanent : l'objet à cette URL ne change
+            // jamais de contenu, un cache long est donc toujours sûr.
             "cache-control": "public, max-age=31536000, immutable",
             // Empêche le navigateur de réinterpréter le fichier au-delà du
-            // content-type déclaré (déjà validé à l'upload, voir plus bas).
+            // content-type déclaré (déjà validé à l'upload, voir plus haut).
             "x-content-type-options": "nosniff",
             ...CORS_HEADERS,
           },
         });
       }
 
-      const ip = request.headers.get("CF-Connecting-IP");
-      if (ip) {
-        const { success } = await env.IMAGE_WRITE_RATE_LIMITER.limit({ key: ip });
-        if (!success) {
-          return jsonError("Trop de tentatives, réessaie dans une minute.", 429);
-        }
-      }
-
-      const stub = env.MEAL_ROOM.get(env.MEAL_ROOM.idFromName(code));
-
-      if (request.method === "PUT") {
-        const contentType = request.headers.get("content-type") ?? "";
-        if (!(ALLOWED_IMAGE_TYPES as readonly string[]).includes(contentType)) {
-          return jsonError("Format d'image non supporté.", 415);
-        }
-        // Vérifie d'abord l'en-tête (rejet rapide sans lire le corps), puis
-        // la taille réelle une fois lue : l'en-tête n'est qu'une déclaration
-        // du client, pas une garantie.
-        const declaredLength = Number(request.headers.get("content-length") ?? "0");
-        if (declaredLength > MAX_IMAGE_BYTES) {
-          return jsonError("Image trop volumineuse (5 Mo max).", 413);
-        }
-        const bytes = await request.arrayBuffer();
-        if (bytes.byteLength > MAX_IMAGE_BYTES) {
-          return jsonError("Image trop volumineuse (5 Mo max).", 413);
-        }
-        await env.MEAL_IMAGES.put(key, bytes, { httpMetadata: { contentType } });
-        const res = await stub.fetch("https://list.internal/apply", {
-          method: "POST",
-          body: JSON.stringify({ type: "setMealImage", id: mealId, hasImage: true }),
-          headers: { "content-type": "application/json" },
-        });
-        return jsonPassthrough(res);
-      }
-
       if (request.method === "DELETE") {
+        const ip = request.headers.get("CF-Connecting-IP");
+        if (ip) {
+          const { success } = await env.IMAGE_WRITE_RATE_LIMITER.limit({ key: ip });
+          if (!success) {
+            return jsonError("Trop de tentatives, réessaie dans une minute.", 429);
+          }
+        }
+
         await env.MEAL_IMAGES.delete(key);
+        const stub = env.MEAL_ROOM.get(env.MEAL_ROOM.idFromName(code));
         const res = await stub.fetch("https://list.internal/apply", {
           method: "POST",
-          body: JSON.stringify({ type: "setMealImage", id: mealId, hasImage: false }),
+          body: JSON.stringify({ type: "removeMealImage", id: mealId, imageId }),
           headers: { "content-type": "application/json" },
         });
         return jsonPassthrough(res);

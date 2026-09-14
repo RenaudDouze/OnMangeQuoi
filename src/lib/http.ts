@@ -29,20 +29,19 @@ export async function fetchListState(code: string): Promise<ListState | null> {
   return res.json();
 }
 
-function mealImagePath(code: string, mealId: string): string {
-  return `/api/lists/${encodeURIComponent(code)}/meals/${encodeURIComponent(mealId)}/image`;
+function mealImagesPath(code: string, mealId: string): string {
+  return `/api/lists/${encodeURIComponent(code)}/meals/${encodeURIComponent(mealId)}/images`;
 }
 
-/** `version` (voir Meal.imageVersion) fait partie de l'URL : elle change à
- * chaque remplacement, ce qui invalide le cache navigateur sans avoir à
- * gérer d'en-têtes de cache spécifiques côté client. */
-export function mealImageUrl(code: string, mealId: string, version: number): string {
-  return apiUrl(`${mealImagePath(code, mealId)}?v=${version}`);
+/** Un id d'image est permanent (voir Meal.images) : l'objet à cette URL ne
+ * change jamais de contenu, donc pas besoin de suffixe de cache-busting. */
+export function mealImageUrl(code: string, mealId: string, imageId: string): string {
+  return apiUrl(`${mealImagesPath(code, mealId)}/${encodeURIComponent(imageId)}`);
 }
 
 export async function uploadMealImage(code: string, mealId: string, file: Blob): Promise<void> {
-  const res = await fetch(apiUrl(mealImagePath(code, mealId)), {
-    method: "PUT",
+  const res = await fetch(apiUrl(mealImagesPath(code, mealId)), {
+    method: "POST",
     headers: { "content-type": file.type },
     body: file,
   });
@@ -52,8 +51,8 @@ export async function uploadMealImage(code: string, mealId: string, file: Blob):
   }
 }
 
-export async function deleteMealImage(code: string, mealId: string): Promise<void> {
-  const res = await fetch(apiUrl(mealImagePath(code, mealId)), { method: "DELETE" });
+export async function deleteMealImage(code: string, mealId: string, imageId: string): Promise<void> {
+  const res = await fetch(apiUrl(`${mealImagesPath(code, mealId)}/${encodeURIComponent(imageId)}`), { method: "DELETE" });
   if (!res.ok) {
     const body: { error?: string } | null = await res.json().catch(() => null);
     throw new ApiError(body?.error || "Impossible de supprimer l'image.");

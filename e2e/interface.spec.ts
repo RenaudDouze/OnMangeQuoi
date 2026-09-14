@@ -473,7 +473,7 @@ test("le panneau de partage affiche le code de la liste", async ({ page }) => {
 const TINY_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
-test("ajouter une image (upload ou collage) l'affiche, et elle peut être supprimée", async ({ page }) => {
+test("ajouter des images (upload ou collage) les affiche en galerie avec navigation, et chacune peut être supprimée", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
   await page.waitForURL(/\/l\//);
@@ -485,7 +485,7 @@ test("ajouter une image (upload ou collage) l'affiche, et elle peut être suppri
 
   await page.click('[data-action="toggle"]');
   await expect(page.locator('[data-action="add-image"]')).toBeVisible();
-  await expect(page.locator(".meal-image-preview")).toHaveCount(0);
+  await expect(page.locator(".meal-image-item")).toHaveCount(0);
 
   await page.setInputFiles('[data-action="image-input"]', {
     name: "photo.png",
@@ -498,29 +498,16 @@ test("ajouter une image (upload ou collage) l'affiche, et elle peut être suppri
   // ne s'est passé.
   await expect(page.locator(".meal-image-loading")).toBeVisible();
 
-  const img = page.locator(".meal-image-preview img");
-  await expect(img).toBeVisible();
-  await expect(img).toHaveAttribute("src", /\/image\?v=1$/);
-  await expect(page.locator('[data-action="add-image"]')).toHaveCount(0);
+  await expect(page.locator(".meal-image-item")).toHaveCount(1);
+  const firstImg = page.locator(".meal-image-item img").first();
+  await expect(firstImg).toBeVisible();
+  await expect(firstImg).toHaveAttribute("src", /\/images\//);
+  await expect(page.locator('[data-action="add-image"]')).toBeVisible();
   await expect(page.locator(".meal-image-loading")).toBeHidden();
 
-  // Cliquer sur la miniature l'affiche en plein écran ; Échap referme.
-  await page.click('[data-action="view-image"]');
-  const lightboxImg = page.locator(".image-lightbox-img");
-  await expect(lightboxImg).toBeVisible();
-  await expect(lightboxImg).toHaveAttribute("src", /\/image\?v=1$/);
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".image-lightbox-overlay")).toHaveCount(0);
-
-  // Un clic n'importe où sur l'overlay referme aussi (pas seulement le
-  // bouton fermer dédié).
-  await page.click('[data-action="view-image"]');
-  await expect(lightboxImg).toBeVisible();
-  await page.click(".image-lightbox-overlay", { position: { x: 5, y: 5 } });
-  await expect(page.locator(".image-lightbox-overlay")).toHaveCount(0);
-
-  // Remplacer par collage (ex : capture d'écran) — événement paste réel
-  // plutôt qu'un second upload, pour exercer ce chemin spécifiquement.
+  // Coller une seconde image (ex : capture d'écran) l'ajoute à la galerie
+  // plutôt que de remplacer la première — événement paste réel plutôt
+  // qu'un second upload, pour exercer ce chemin spécifiquement.
   await page.evaluate(async (base64) => {
     const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
     const file = new File([blob], "pasted.png", { type: "image/png" });
@@ -528,15 +515,34 @@ test("ajouter une image (upload ou collage) l'affiche, et elle peut être suppri
     dt.items.add(file);
     document.querySelector(".meal-card")!.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
   }, TINY_PNG_BASE64);
-  await expect(img).toHaveAttribute("src", /\/image\?v=2$/);
+  await expect(page.locator(".meal-image-item")).toHaveCount(2);
 
-  // Supprimer demande un second clic au même endroit, comme les autres
-  // actions destructrices de la carte.
-  const removeBtn = page.locator('[data-action="remove-image"]');
+  // Cliquer sur la première miniature l'affiche en plein écran avec un
+  // compteur et une navigation suivant/précédent ; la flèche droite passe à
+  // la seconde photo, Échap referme.
+  await page.locator('[data-action="view-image"]').first().click();
+  const lightboxImg = page.locator(".image-lightbox-img");
+  await expect(lightboxImg).toBeVisible();
+  await expect(page.locator(".image-lightbox-counter")).toHaveText("1 / 2");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".image-lightbox-counter")).toHaveText("2 / 2");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".image-lightbox-overlay")).toHaveCount(0);
+
+  // Un clic n'importe où sur l'overlay referme aussi (pas seulement le
+  // bouton fermer dédié).
+  await page.locator('[data-action="view-image"]').first().click();
+  await expect(lightboxImg).toBeVisible();
+  await page.click(".image-lightbox-overlay", { position: { x: 5, y: 5 } });
+  await expect(page.locator(".image-lightbox-overlay")).toHaveCount(0);
+
+  // Supprimer une photo demande un second clic au même endroit, comme les
+  // autres actions destructrices de la carte, et ne retire qu'elle.
+  const removeBtn = page.locator('[data-action="remove-image"]').first();
   await removeBtn.click();
   await expect(removeBtn).toHaveClass(/confirm-armed/);
   await removeBtn.click();
-  await expect(page.locator(".meal-image-preview")).toHaveCount(0);
+  await expect(page.locator(".meal-image-item")).toHaveCount(1);
   await expect(page.locator('[data-action="add-image"]')).toBeVisible();
 });
 
@@ -625,4 +631,135 @@ test("un toast « Annuler » apparaît après avoir modifié un titre ou un comm
 
   await page.click("#list-toast button");
   await expect(page.locator('[data-field="comment"]')).toHaveValue("");
+});
+
+test("les filtres de la liste active se combinent (statut + temps de préparation) et se réinitialisent", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  // Un nouveau repas apparaît en tête de la liste active (voir prevOrder
+  // côté reducer) : ne pas supposer un ordre d'ajout, cibler chaque carte
+  // par son titre.
+  async function addMeal(title: string) {
+    await page.fill("#add-title", title);
+    await page.click("#add-form button[type=submit]");
+    await expect(page.locator(`.meal-card:has-text("${title}")`)).toBeVisible();
+  }
+
+  await addMeal("Tartiflette");
+  await addMeal("Curry");
+  await addMeal("Salade");
+
+  // Tartiflette : validée, rapide. Curry : idée, long. Salade : idée, rapide.
+  await page.click('.meal-card:has-text("Tartiflette") [data-action="toggle"]');
+  await page.click('.meal-card:has-text("Tartiflette") .status-pill[data-status="validee"]');
+  await page.click('.meal-card:has-text("Tartiflette") .preptime-pill[data-preptime="rapide"]');
+  await page.click('.meal-card:has-text("Curry") [data-action="toggle"]');
+  await page.click('.meal-card:has-text("Curry") .preptime-pill[data-preptime="long"]');
+  await page.click('.meal-card:has-text("Salade") [data-action="toggle"]');
+  await page.click('.meal-card:has-text("Salade") .preptime-pill[data-preptime="rapide"]');
+
+  await expect(page.locator(".meal-card")).toHaveCount(3);
+
+  await page.click("#filter-toggle-btn");
+  await expect(page.locator("#filter-panel")).toBeVisible();
+  await expect(page.locator("#filter-reset-btn")).toBeHidden();
+
+  // Filtre par statut "validée" : seule Tartiflette correspond.
+  await page.click('.filter-status-pill[data-status="validee"]');
+  await expect(page.locator(".meal-card")).toHaveCount(1);
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+  await expect(page.locator("#filter-reset-btn")).toBeVisible();
+
+  // Ajouter le filtre "long" en plus (Tartiflette est "rapide", pas "long") :
+  // les filtres se combinent (ET), plus aucun résultat.
+  await page.click('.filter-preptime-pill[data-preptime="long"]');
+  await expect(page.locator(".meal-card")).toHaveCount(0);
+  await expect(page.locator(".empty-message")).toContainText("Aucun repas ne correspond aux filtres.");
+
+  // Réinitialiser retrouve les 3 repas et masque à nouveau le bouton.
+  await page.click("#filter-reset-btn");
+  await expect(page.locator(".meal-card")).toHaveCount(3);
+  await expect(page.locator("#filter-reset-btn")).toBeHidden();
+});
+
+test("le panneau de statistiques de l'historique résume notes, temps de préparation et repas les plus refaits", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  async function addAndArchive(title: string, note: string) {
+    await page.fill("#add-title", title);
+    await page.click("#add-form button[type=submit]");
+    const card = page.locator(`.meal-card:has-text("${title}")`);
+    await expect(card).toBeVisible();
+    await card.locator('[data-action="toggle"]').click();
+    await card.locator('.status-pill[data-status="fait"]').click();
+    await page.click(`#mark-done-note-picker [data-note="${note}"]`);
+    await page.click("#mark-done-confirm");
+    // Attend que l'archivage soit effectif (aller-retour serveur) avant
+    // l'ajout suivant, sans quoi deux repas de même titre pourraient
+    // coexister brièvement dans le DOM et rendre le prochain ciblage par
+    // titre ambigu.
+    await expect(page.locator(".meal-card")).toHaveCount(0);
+  }
+
+  await addAndArchive("Tartiflette", "quand_tu_veux");
+  await addAndArchive("Tartiflette", "quand_tu_veux");
+  await addAndArchive("Curry", "mouais");
+
+  await page.click('.tab-btn[data-tab="archive"]');
+  await expect(page.locator(".meal-card")).toHaveCount(3);
+  await expect(page.locator("#stats-panel")).toBeHidden();
+
+  await page.click("#stats-toggle-btn");
+  await expect(page.locator("#stats-panel")).toBeVisible();
+  await expect(page.locator("#stats-panel")).toContainText("3 repas dans l'historique.");
+  await expect(page.locator("#stats-panel")).toContainText("Quand tu veux où tu veux");
+  await expect(page.locator("#stats-panel")).toContainText("Mouais, ça change mais bon");
+  await expect(page.locator("#stats-panel")).toContainText("Les plus refaits");
+  await expect(page.locator("#stats-panel")).toContainText("Tartiflette");
+});
+
+test("planifier un repas sur aujourd'hui l'affiche dans l'onglet Planning, et « Aujourd'hui »/le retirer fonctionnent", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await page.click('[data-action="toggle"]');
+
+  // Fixe le champ "Jour prévu" à aujourd'hui en déclenchant directement
+  // l'événement "change" (voir wireMealCard) : plus robuste qu'un fill()
+  // pour un <input type="date">, dont le comportement des événements
+  // synthétisés varie selon le navigateur/la version de Playwright.
+  await page.evaluate(() => {
+    const input = document.querySelector('[data-action="planned-date"]') as HTMLInputElement;
+    const d = new Date();
+    input.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  await page.click('.tab-btn[data-tab="planning"]');
+  await expect(page.locator("#meal-list")).toBeHidden();
+  await expect(page.locator(".planning-day.today .planning-entry-title")).toHaveText("Tartiflette");
+
+  // Naviguer à la semaine suivante fait disparaître la colonne "today" ;
+  // « Aujourd'hui » revient à la semaine courante.
+  await page.click("#planning-next");
+  await expect(page.locator(".planning-day.today")).toHaveCount(0);
+  await page.click("#planning-today-btn");
+  await expect(page.locator(".planning-day.today .planning-entry-title")).toHaveText("Tartiflette");
+
+  // Retirer du planning depuis la grille vide aussi le champ "Jour prévu"
+  // de la carte (même mécanisme, un seul champ de vérité côté serveur).
+  await page.click('.planning-day.today [data-action="unplan"]');
+  await expect(page.locator(".planning-day.today .planning-entry-empty")).toBeVisible();
+  await page.click('.tab-btn[data-tab="active"]');
+  await expect(page.locator('[data-action="planned-date"]')).toHaveValue("");
 });
