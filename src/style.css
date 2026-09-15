@@ -544,21 +544,37 @@ button:focus-visible,
   position: relative;
 }
 
-/* Ligne d'actions secondaires (tri, filtrer, tout déplier) séparée du
-   header : celui-ci ne wrap jamais (le titre y rétrécit plutôt, voir
-   .list-header h1), alors qu'avoir jusqu'à 3 boutons ici doit pouvoir
-   passer à la ligne sur un écran étroit sans rien écraser d'autre. */
-.list-toolbar {
+/* Menu déroulant des actions secondaires (tri, filtrer, tout déplier,
+   partager) : aucune n'a besoin d'un accès direct depuis le header, qui
+   reste donc sur une seule ligne (le titre y rétrécit plutôt, voir
+   .list-header h1) avec un unique bouton pour les regrouper. */
+.action-menu {
+  position: absolute;
+  top: 3rem;
+  right: 1rem;
+  z-index: 5;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.4rem;
+  box-shadow: var(--shadow);
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem 1rem;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 180px;
 }
 
-.list-toolbar .btn-link {
-  align-self: center;
-  flex-shrink: 0;
-  white-space: nowrap;
+.action-menu .btn-link {
+  align-self: stretch;
+  text-align: left;
+  text-decoration: none;
+  padding: 0.6em 0.7em;
+  border-radius: 8px;
+}
+
+.action-menu .btn-link:hover {
+  opacity: 1;
+  background: var(--checked-bg);
 }
 
 .list-header h1 {

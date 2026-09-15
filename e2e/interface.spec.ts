@@ -372,12 +372,15 @@ test("les repas sont repliés par défaut, s'ouvrent au clic, et « Tout déplie
   await expect(page.locator('.meal-card:has-text("Curry de légumes")')).not.toHaveClass(/expanded/);
   await expect(page.locator("#toggle-all-btn")).toHaveText("Tout déplier");
 
-  // "Tout déplier" ouvre les repas encore repliés.
+  // "Tout déplier" (dans le menu d'actions, voir #menu-toggle-btn) ouvre
+  // les repas encore repliés.
+  await page.click("#menu-toggle-btn");
   await page.click("#toggle-all-btn");
   await expect(page.locator(".meal-card.expanded")).toHaveCount(2);
   await expect(page.locator("#toggle-all-btn")).toHaveText("Tout replier");
 
   // Un second clic replie tout.
+  await page.click("#menu-toggle-btn");
   await page.click("#toggle-all-btn");
   await expect(page.locator(".meal-card.expanded")).toHaveCount(0);
   await expect(page.locator("#toggle-all-btn")).toHaveText("Tout déplier");
@@ -498,6 +501,7 @@ test("le panneau de partage affiche le code de la liste", async ({ page }) => {
   await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
 
   const code = page.url().split("/l/")[1];
+  await page.click("#menu-toggle-btn");
   await page.click("#btn-share");
   await expect(page.locator("#share-code")).toHaveText(code);
 
@@ -624,6 +628,7 @@ test("le tri automatique par statut réordonne la liste active, indépendamment 
   await page.click('.meal-card:has-text("Trois") .status-pill[data-status="non_complet"]');
 
   await expect(page.locator("#sort-toggle-btn")).toHaveText("Trier par statut");
+  await page.click("#menu-toggle-btn");
   await page.click("#sort-toggle-btn");
   await expect(page.locator("#sort-toggle-btn")).toHaveText("Tri manuel");
   await expect(page.locator("#sort-toggle-btn")).toHaveAttribute("aria-pressed", "true");
@@ -635,6 +640,7 @@ test("le tri automatique par statut réordonne la liste active, indépendamment 
   await expect(page.locator('[data-action="move-up"]')).toHaveCount(0);
 
   // Revenir au tri manuel restaure l'ordre manuel d'origine.
+  await page.click("#menu-toggle-btn");
   await page.click("#sort-toggle-btn");
   await expect(page.locator("#sort-toggle-btn")).toHaveText("Trier par statut");
   await expect(page.locator(".meal-title")).toHaveText(["Trois", "Deux", "Un"]);
@@ -670,30 +676,39 @@ test("un toast « Annuler » apparaît après avoir modifié un titre ou un comm
   await expect(page.locator('[data-field="comment"]')).toHaveValue("");
 });
 
-test("le bouton Filtrer vit dans la même barre d'outils que Trier par statut et Tout déplier, et se masque hors de l'onglet actif", async ({ page }) => {
+test("le menu d'actions regroupe trier, filtrer, tout déplier et partager, et se referme après une sélection", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
   await page.waitForURL(/\/l\//);
   await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
 
-  const toolbar = page.locator("#list-toolbar");
-  await expect(toolbar.locator("#sort-toggle-btn")).toBeVisible();
-  await expect(toolbar.locator("#filter-toggle-btn")).toBeVisible();
-  await expect(toolbar.locator("#toggle-all-btn")).toHaveCount(1);
+  const menu = page.locator("#action-menu");
+  await expect(menu).toBeHidden();
+  await page.click("#menu-toggle-btn");
+  await expect(menu).toBeVisible();
+  await expect(page.locator("#sort-toggle-btn")).toBeVisible();
+  await expect(page.locator("#filter-toggle-btn")).toBeVisible();
+  await expect(page.locator("#toggle-all-btn")).toHaveCount(1);
+  await expect(page.locator("#btn-share")).toBeVisible();
 
-  // Ouvrir le panneau de filtres, puis quitter l'onglet actif : le bouton
-  // (comme #sort-toggle-btn) et le panneau se masquent tous les deux, pas
-  // seulement le bouton — sans quoi le panneau resterait affiché hors de
-  // propos sur l'historique.
+  // Sélectionner "Filtrer" ouvre le panneau de filtres et referme le menu
+  // (contrairement au panneau lui-même, qui reste ouvert pour cocher
+  // plusieurs filtres de suite).
   await page.click("#filter-toggle-btn");
+  await expect(menu).toBeHidden();
   await expect(page.locator("#filter-panel")).toBeVisible();
 
+  // Quitter l'onglet actif masque le bouton (comme #sort-toggle-btn) et le
+  // panneau ensemble — sans quoi le panneau resterait affiché hors de
+  // propos sur l'historique.
   await page.click('.tab-btn[data-tab="archive"]');
+  await expect(page.locator("#filter-panel")).toBeHidden();
+  await page.click("#menu-toggle-btn");
   await expect(page.locator("#sort-toggle-btn")).toBeHidden();
   await expect(page.locator("#filter-toggle-btn")).toBeHidden();
-  await expect(page.locator("#filter-panel")).toBeHidden();
 
   await page.click('.tab-btn[data-tab="active"]');
+  await page.click("#menu-toggle-btn");
   await expect(page.locator("#filter-toggle-btn")).toBeVisible();
   await expect(page.locator("#filter-panel")).toBeHidden();
 });
@@ -728,6 +743,7 @@ test("les filtres de la liste active se combinent (statut + temps de préparatio
 
   await expect(page.locator(".meal-card")).toHaveCount(3);
 
+  await page.click("#menu-toggle-btn");
   await page.click("#filter-toggle-btn");
   await expect(page.locator("#filter-panel")).toBeVisible();
   await expect(page.locator("#filter-reset-btn")).toBeHidden();

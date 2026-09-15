@@ -533,20 +533,20 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <button type="button" class="icon-btn" id="btn-home" aria-label="Retour à l'accueil">${icons.back}</button>
         <h1 id="list-title" role="button" tabindex="0">${escapeHtml(state.name)}</h1>
         <span class="conn-dot" id="conn-dot" title="${connected ? "Synchronisé" : "Connexion…"}"></span>
-        <button type="button" class="icon-btn" id="btn-share" aria-label="Partager">${icons.share}</button>
+        <button type="button" class="icon-btn" id="menu-toggle-btn" aria-label="Menu" aria-expanded="false">${icons.more}</button>
       </header>
+      <div class="action-menu" id="action-menu" hidden>
+        <button type="button" class="btn-link" id="sort-toggle-btn" aria-pressed="false">Trier par statut</button>
+        <button type="button" class="btn-link" id="filter-toggle-btn" aria-pressed="false">Filtrer</button>
+        <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
+        <button type="button" class="btn-link" id="btn-share">Partager</button>
+      </div>
       <div class="share-panel" id="share-panel" hidden>
         <p>Code : <strong id="share-code">${state.code}</strong></p>
         <div class="qr-wrap" id="qr-wrap" aria-label="QR code de partage"></div>
         <button type="button" class="btn" id="copy-name">Copier le nom</button>
         <button type="button" class="btn" id="copy-code">Copier le code</button>
         <button type="button" class="btn" id="copy-link">Copier le lien</button>
-      </div>
-
-      <div class="list-toolbar" id="list-toolbar">
-        <button type="button" class="btn-link" id="sort-toggle-btn" aria-pressed="false">Trier par statut</button>
-        <button type="button" class="btn-link" id="filter-toggle-btn" aria-pressed="false">Filtrer</button>
-        <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
       </div>
 
       <nav class="tabs" id="tabs">
@@ -724,16 +724,39 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     dot.setAttribute("title", connected ? "Synchronisé" : "Connexion…");
   }
 
+  /** Referme le menu d'actions (tri, filtrer, tout déplier, partager) —
+   * appelé après chaque sélection dedans (voir wireHeader/wireToolbar/
+   * wireFilters), contrairement au panneau de partage ou de filtres, qui
+   * restent ouverts après une action pour permettre plusieurs interactions
+   * de suite (copier plusieurs champs, cocher plusieurs filtres). */
+  function closeActionMenu(): void {
+    const menu = root.querySelector("#action-menu") as HTMLElement | null;
+    if (menu) menu.hidden = true;
+    root.querySelector("#menu-toggle-btn")?.setAttribute("aria-expanded", "false");
+  }
+
   function wireHeader(): void {
     root.querySelector("#btn-home")?.addEventListener("click", () => navigate("/"));
+
+    const actionMenu = root.querySelector("#action-menu") as HTMLElement | null;
+    const menuToggleBtn = root.querySelector("#menu-toggle-btn") as HTMLButtonElement | null;
+    menuToggleBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!actionMenu) return;
+      actionMenu.hidden = !actionMenu.hidden;
+      menuToggleBtn.setAttribute("aria-expanded", String(!actionMenu.hidden));
+    });
+    actionMenu?.addEventListener("click", (e) => e.stopPropagation());
 
     const sharePanel = root.querySelector("#share-panel") as HTMLElement | null;
     root.querySelector("#btn-share")?.addEventListener("click", (e) => {
       e.stopPropagation();
       if (sharePanel) sharePanel.hidden = !sharePanel.hidden;
+      closeActionMenu();
     });
     document.addEventListener("click", () => {
       if (sharePanel) sharePanel.hidden = true;
+      closeActionMenu();
     });
     sharePanel?.addEventListener("click", (e) => e.stopPropagation());
     root.querySelector("#copy-name")?.addEventListener("click", () => {
@@ -864,6 +887,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (!panel) return;
       panel.hidden = !panel.hidden;
       toggleBtn.setAttribute("aria-pressed", String(!panel.hidden));
+      closeActionMenu();
     });
     root.querySelector("#filter-reset-btn")?.addEventListener("click", () => {
       activeStatusFilters.clear();
@@ -915,6 +939,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         else expandedIds.add(m.id);
       }
       renderMeals();
+      closeActionMenu();
     });
 
     root.querySelector("#sort-toggle-btn")?.addEventListener("click", () => {
@@ -923,6 +948,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       updateSortToggleBtn();
       sortable?.option("disabled", sortByStatus);
       renderMeals();
+      closeActionMenu();
     });
     updateSortToggleBtn();
   }

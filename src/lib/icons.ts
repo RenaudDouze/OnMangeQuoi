@@ -52,4 +52,8 @@ export const icons = {
   // ne convient pas au gabarit stroke-only.
   accessibility:
     '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>',
+  // Menu d'actions secondaires du header (tri, filtrer, tout déplier,
+  // partager) : trois points pleins, même gabarit que "grip" ci-dessus.
+  more:
+    '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="12" cy="19" r="1.75"/></svg>',
 } as const;
