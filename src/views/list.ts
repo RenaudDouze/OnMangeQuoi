@@ -538,6 +538,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
       <div class="share-panel" id="share-panel" hidden>
         <p>Code : <strong id="share-code">${state.code}</strong></p>
         <div class="qr-wrap" id="qr-wrap" aria-label="QR code de partage"></div>
+        <button type="button" class="btn" id="copy-name">Copier le nom</button>
         <button type="button" class="btn" id="copy-code">Copier le code</button>
         <button type="button" class="btn" id="copy-link">Copier le lien</button>
       </div>
@@ -735,6 +736,9 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (sharePanel) sharePanel.hidden = true;
     });
     sharePanel?.addEventListener("click", (e) => e.stopPropagation());
+    root.querySelector("#copy-name")?.addEventListener("click", () => {
+      if (state) copyToClipboard(state.name, "Nom copié.");
+    });
     root.querySelector("#copy-code")?.addEventListener("click", () => {
       if (state) copyToClipboard(state.code, "Code copié.");
     });
