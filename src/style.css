@@ -849,6 +849,7 @@ button:focus-visible,
    (agrandi comme le reste du texte, voir :root[data-a11y]) ou pour les
    personnes daltoniennes. */
 .meal-status-badge {
+  align-self: center;
   flex-shrink: 0;
   font-size: 1.1em;
   line-height: 1;
@@ -1022,6 +1023,17 @@ button:focus-visible,
 .filter-preptime-pill[aria-pressed="true"] {
   color: #fff;
   border-color: transparent;
+}
+
+/* "Non renseigné" (voir prepTimePickerHtml) : seul .preptime-pill a une
+   valeur "aucune" — .filter-preptime-pill n'en a pas besoin, un filtre
+   n'a rien à faire de "pas de temps renseigné". Sans cette règle, le
+   texte blanc de la règle ci-dessus se serait retrouvé sur le fond clair
+   par défaut faute de couleur dédiée : illisible, et son emplacement
+   dans la rangée se lisait comme un décalage des autres pastilles. Même
+   couleur neutre que .status-pill[data-status="idee"]. */
+.preptime-pill[data-preptime=""][aria-pressed="true"] {
+  background: #8d8177;
 }
 
 .preptime-pill[data-preptime="rapide"][aria-pressed="true"],
