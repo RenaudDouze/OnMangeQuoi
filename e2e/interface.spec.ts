@@ -594,7 +594,17 @@ test("le temps de préparation d'un repas se choisit et persiste après recharge
   await page.click("#add-form button[type=submit]");
   await page.click('[data-action="toggle"]');
 
-  await expect(page.locator('.preptime-pill[data-preptime=""]')).toHaveAttribute("aria-pressed", "true");
+  // Régression : "Non renseigné" pressé par défaut (nouveau repas) doit
+  // rester lisible — le texte blanc de l'état pressé s'était une fois
+  // retrouvé sans couleur de fond dédiée, sur le fond clair par défaut.
+  const noneBtn = page.locator('.preptime-pill[data-preptime=""]');
+  await expect(noneBtn).toHaveAttribute("aria-pressed", "true");
+  const [color, background] = await noneBtn.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return [style.color, style.backgroundColor];
+  });
+  expect(color).not.toBe(background);
+
   await page.click('.preptime-pill[data-preptime="long"]');
   await expect(page.locator('.preptime-pill[data-preptime="long"]')).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator('.preptime-pill[data-preptime=""]')).toHaveAttribute("aria-pressed", "false");
