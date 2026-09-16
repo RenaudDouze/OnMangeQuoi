@@ -30,10 +30,9 @@ export const icons = {
     '<path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11 5"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07L13 19"/>',
   ),
   chevronDown: svg('<path d="m6 9 6 6 6-6"/>'),
-  // Alternative clavier au glisser-déposer (voir wireMealList/SortableJS,
-  // qui ne gère que souris/tactile) : monter/descendre un repas d'un cran.
-  arrowUp: svg('<path d="M12 19V5M5 12l7-7 7 7"/>'),
-  arrowDown: svg('<path d="M12 5v14M19 12l-7 7-7-7"/>'),
+  // Copier le titre d'un repas (voir wireMealCard) : deux rectangles
+  // superposés, motif standard pour "copier".
+  copy: svg('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
   // Navigation planning (semaine suivante) / galerie photo (image suivante) :
   // miroir de "back" ci-dessus.
   forward: svg('<path d="M5 12h14M12 5l7 7-7 7"/>'),
