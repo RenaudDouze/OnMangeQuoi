@@ -123,7 +123,8 @@ test("glisser une carte par sa poignée réordonne la liste active", async ({ pa
   await expect(page.locator(".meal-title")).toHaveText(["Curry de légumes", "Soupe de légumes", "Tartiflette"]);
 });
 
-test("les boutons monter/descendre réordonnent la liste active, alternative clavier au glisser-déposer", async ({ page }) => {
+test("copier le titre d'un repas le place dans le presse-papiers", async ({ page }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
   await page.waitForURL(/\/l\//);
@@ -131,17 +132,13 @@ test("les boutons monter/descendre réordonnent la liste active, alternative cla
 
   await page.fill("#add-title", "Tartiflette");
   await page.click("#add-form button[type=submit]");
-  await page.fill("#add-title", "Curry de légumes");
-  await page.click("#add-form button[type=submit]");
-  await expect(page.locator(".meal-title")).toHaveText(["Curry de légumes", "Tartiflette"]);
+  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
 
-  // Premier repas de la liste : "monter" est désactivé (rien au-dessus).
-  await expect(page.locator(".meal-card").nth(0).locator('[data-action="move-up"]')).toBeDisabled();
-  // Dernier repas : "descendre" est désactivé.
-  await expect(page.locator(".meal-card").nth(1).locator('[data-action="move-down"]')).toBeDisabled();
-
-  await page.locator(".meal-card").nth(0).locator('[data-action="move-down"]').click();
-  await expect(page.locator(".meal-title")).toHaveText(["Tartiflette", "Curry de légumes"]);
+  // Visible directement sur la ligne repliée, pas besoin de déplier la carte.
+  await page.click('[data-action="copy-title"]');
+  await expect(page.locator("#list-toast")).toContainText("Titre copié.");
+  const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboardText).toBe("Tartiflette");
 });
 
 test("le titre d'un repas est éditable au clavier (Entrée), pas seulement au clic", async ({ page }) => {
@@ -634,10 +631,9 @@ test("le tri automatique par statut réordonne la liste active, indépendamment 
   await expect(page.locator("#sort-toggle-btn")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".meal-title")).toHaveText(["Deux", "Un", "Trois"]);
 
-  // Pas de poignée de glissé ni de boutons monter/descendre tant que le tri
-  // automatique est actif : le réordonnancement manuel n'aurait pas de sens.
+  // Pas de poignée de glissé tant que le tri automatique est actif : le
+  // réordonnancement manuel n'aurait pas de sens.
   await expect(page.locator(".drag-handle")).toHaveCount(0);
-  await expect(page.locator('[data-action="move-up"]')).toHaveCount(0);
 
   // Revenir au tri manuel restaure l'ordre manuel d'origine.
   await page.click("#menu-toggle-btn");

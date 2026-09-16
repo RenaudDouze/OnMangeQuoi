@@ -402,15 +402,7 @@ function mealImageFieldHtml(meal: Meal, code: string): string {
 /** Replié par défaut (juste le titre) : le contenu (statut, source,
  * commentaire) ne s'affiche qu'une fois déplié, au clic sur le chevron ou
  * via "Tout déplier" — voir expandedIds dans mountListView. */
-function mealCardHtml(
-  meal: Meal,
-  archived: boolean,
-  expanded: boolean,
-  code: string,
-  isFirst: boolean,
-  isLast: boolean,
-  reorderable: boolean,
-): string {
+function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: string, reorderable: boolean): string {
   const statusArea = archived
     ? `<span class="status-badge">🎉 Fait le ${formatDate(meal.doneAt ?? meal.updatedAt)}</span>`
     : statusPickerHtml(meal.status);
@@ -432,16 +424,7 @@ function mealCardHtml(
     ? `<button type="button" class="icon-btn" data-action="restore" aria-label="Remettre dans la liste" title="Remettre dans la liste">${icons.undo}</button>`
     : "";
 
-  // Alternative clavier au glisser-déposer (voir wireMealList/SortableJS,
-  // souris/tactile uniquement) : sans ça, un utilisateur clavier n'a aucun
-  // moyen de réordonner la liste active. Ni sur l'historique (jamais
-  // réordonnable), ni quand le tri automatique par statut est actif (voir
-  // sortByStatus) : l'ordre n'y est alors plus manuel, le réordonnancement
-  // n'aurait pas de sens tant qu'il reste actif.
-  const moveButtons = reorderable
-    ? `<button type="button" class="icon-btn" data-action="move-up" aria-label="Monter dans la liste"${isFirst ? " disabled" : ""}>${icons.arrowUp}</button>
-       <button type="button" class="icon-btn" data-action="move-down" aria-label="Descendre dans la liste"${isLast ? " disabled" : ""}>${icons.arrowDown}</button>`
-    : "";
+  const copyTitleBtn = `<button type="button" class="icon-btn" data-action="copy-title" aria-label="Copier le titre" title="Copier le titre">${icons.copy}</button>`;
 
   // Le bouton supprimer vit dans le contenu déplié plutôt que sur la ligne
   // du titre (voir .meal-main) : son apparition/disparition au dépli n'y
@@ -512,7 +495,7 @@ function mealCardHtml(
         ${toggleBtn}
         ${statusBadge}
         <h3 class="meal-title" data-action="edit-title" role="button" tabindex="0">${escapeHtml(meal.title)}</h3>
-        <div class="meal-controls">${restoreBtn}${moveButtons}</div>
+        <div class="meal-controls">${copyTitleBtn}${restoreBtn}</div>
       </div>
       ${details}
     </li>`;
@@ -615,8 +598,8 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   let weekStart = startOfWeek(Date.now());
   // Préférence propre à cet appareil (voir src/lib/sortPreference.ts) : trie
   // la liste active par statut plutôt que par ordre manuel. Le glisser-
-  // déposer et les boutons monter/descendre (voir wireMealList/moveMeal)
-  // n'ont alors plus de sens et sont masqués tant qu'elle reste active.
+  // déposer (voir wireMealList) n'a alors plus de sens et est désactivé tant
+  // qu'elle reste active.
   let sortByStatus = getSortByStatus();
   let sortable: Sortable | null = null;
   // Le temps d'un glissé (voir wireMealList) : évite qu'une mise à jour
@@ -1074,24 +1057,11 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     );
   }
 
-  /** Alternative clavier au glisser-déposer (voir wireMealList) : échange le
-   * repas `id` avec son voisin immédiat dans la liste active affichée, puis
-   * envoie le même message "reorderMeals" que le dépôt d'un glissé — aucune
-   * différence côté serveur entre les deux façons de réordonner. */
-  function moveMeal(id: string, delta: number): void {
-    const ids = visibleMeals().map((m) => m.id);
-    const idx = ids.indexOf(id);
-    const target = idx + delta;
-    if (idx === -1 || target < 0 || target >= ids.length) return;
-    [ids[idx], ids[target]] = [ids[target], ids[idx]];
-    conn.send({ type: "reorderMeals", orderedIds: ids });
-  }
-
   /** Repas actuellement affichés (onglet + recherche), dans l'ordre affiché
    * — partagé entre le rendu et "Tout déplier" pour qu'ils portent sur
    * exactement les mêmes repas. Sur la liste active, soit l'ordre manuel
-   * (glisser-déposer / boutons monter-descendre), soit un tri automatique
-   * par statut (voir sortByStatus) — au choix, jamais les deux à la fois. */
+   * (glisser-déposer), soit un tri automatique par statut (voir
+   * sortByStatus) — au choix, jamais les deux à la fois. */
   function visibleMeals(): Meal[] {
     if (!state) return [];
     if (tab === "planning") return [];
@@ -1209,21 +1179,12 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     });
 
     const reorderable = tab === "active" && !sortByStatus;
-    const cards = meals.map((meal, index) => {
+    const cards = meals.map((meal) => {
       const existing = existingById.get(meal.id);
       const expanded = expandedIds.has(meal.id);
-      // isFirst/isLast déterminent l'état désactivé des boutons monter/
-      // descendre (voir mealCardHtml) : ça dépend de la position, pas
-      // seulement du contenu du repas, donc ça doit aussi faire partie de la
-      // clé qui décide si la carte doit être régénérée. reorderable est
-      // inclus séparément : quand il change, une carte du milieu de la
-      // liste (ni première ni dernière) doit quand même être régénérée pour
-      // afficher/masquer sa poignée de glissé.
-      const isFirst = reorderable && index === 0;
-      const isLast = reorderable && index === meals.length - 1;
-      const rev = `${meal.updatedAt}:${expanded}:${isFirst}:${isLast}:${reorderable}`;
+      const rev = `${meal.updatedAt}:${expanded}:${reorderable}`;
       if (existing && (meal.id === frozenId || existing.dataset.rev === rev)) return existing;
-      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expanded, code, isFirst, isLast, reorderable));
+      const card = elementFromHtml(mealCardHtml(meal, tab === "archive", expanded, code, reorderable));
       card.dataset.rev = rev;
       wireMealCard(card, meal);
       return card;
@@ -1297,8 +1258,9 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       });
     }
 
-    card.querySelector<HTMLButtonElement>('[data-action="move-up"]')?.addEventListener("click", () => moveMeal(id, -1));
-    card.querySelector<HTMLButtonElement>('[data-action="move-down"]')?.addEventListener("click", () => moveMeal(id, 1));
+    card.querySelector<HTMLButtonElement>('[data-action="copy-title"]')?.addEventListener("click", () => {
+      copyToClipboard(meal.title, "Titre copié.");
+    });
 
     card.querySelectorAll<HTMLButtonElement>(".preptime-pill").forEach((btn) => {
       btn.addEventListener("click", () => {
