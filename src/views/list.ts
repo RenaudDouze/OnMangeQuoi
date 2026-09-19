@@ -1418,6 +1418,10 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       btn.addEventListener("click", () => {
         const status = btn.dataset.status as MealStatus;
         if (status === meal.status) return;
+        // Retour haptique sur mobile (best-effort, l'API n'est pas partout
+        // disponible) : même geste principal que le "cocher un article" de
+        // KoiKiManke, ici le changement de statut du repas.
+        navigator.vibrate?.(10);
         if (status === "fait") {
           // Lit la valeur en direct du textarea plutôt que meal.comment (qui
           // peut être périmé si on clique juste après avoir tapé, avant que

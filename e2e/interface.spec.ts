@@ -850,3 +850,38 @@ test("planifier un repas sur aujourd'hui l'affiche dans l'onglet Planning, et «
   await page.click('.tab-btn[data-tab="active"]');
   await expect(page.locator('[data-action="planned-date"]')).toHaveValue("");
 });
+
+test("changer le statut d'un repas déclenche un retour haptique (vibration courte)", async ({ page }) => {
+  // navigator.vibrate n'est pas forcément disponible partout (voir son
+  // utilisation en best-effort dans src/views/list.ts) : on le pose ici
+  // nous-mêmes, avant tout script de l'app, pour espionner ses appels.
+  await page.addInitScript(() => {
+    (window as unknown as { __vibrateCalls: number[] }).__vibrateCalls = [];
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      value: (pattern: number) => {
+        (window as unknown as { __vibrateCalls: number[] }).__vibrateCalls.push(pattern);
+        return true;
+      },
+    });
+  });
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Tartiflette");
+  await page.click("#add-form button[type=submit]");
+  await page.click('[data-action="toggle"]');
+
+  await page.click('.status-pill[data-status="validee"]');
+  await expect(page.locator('.status-pill[data-status="validee"]')).toHaveAttribute("aria-pressed", "true");
+  const calls = await page.evaluate(() => (window as unknown as { __vibrateCalls: number[] }).__vibrateCalls);
+  expect(calls).toEqual([10]);
+
+  // Recliquer sur le statut déjà actif ne déclenche pas de second appel :
+  // ce n'est pas un vrai changement.
+  await page.click('.status-pill[data-status="validee"]');
+  const callsAfter = await page.evaluate(() => (window as unknown as { __vibrateCalls: number[] }).__vibrateCalls);
+  expect(callsAfter).toEqual([10]);
+});
