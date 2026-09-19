@@ -4,11 +4,20 @@ import { escapeHtml } from "../lib/dom";
 import { icons } from "../lib/icons";
 import { cycleThemePreference, getThemePreference, themeLabel, type ThemePreference } from "../lib/theme";
 import { getA11yPreference, setA11yPreference } from "../lib/a11y";
+import { decodeSnapshotFromParam } from "../lib/compactShare";
 import { MAX_LIST_NAME_LENGTH } from "../../shared/types";
 
 const THEME_ICON: Record<ThemePreference, string> = { system: icons.themeAuto, light: icons.sun, dark: icons.moon };
 
 export function mountHomeView(root: HTMLElement, navigate: (path: string) => void): () => void {
+  // Lien/QR de partage figé (voir src/lib/compactShare.ts et le bouton
+  // "Générer un lien + QR figés" de la liste) : décodé une seule fois par
+  // montage, pas à chaque render() (thème, accessibilité…) — sans quoi le
+  // décodage (peu coûteux mais inutile) tournerait à chaque interaction sans
+  // rapport avec l'import.
+  const importParam = new URLSearchParams(location.search).get("import");
+  const importedSnapshot = importParam ? decodeSnapshotFromParam(importParam) : null;
+
   render();
 
   function recentItemHtml(r: { code: string; name: string }): string {
@@ -43,6 +52,18 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
             de sensible.
           </p>
         </header>
+
+        ${
+          importedSnapshot
+            ? `<section class="card">
+                <h2>Aperçu de liste partagé</h2>
+                <p>${escapeHtml(importedSnapshot.name || "Sans nom")} — ${importedSnapshot.meals.length} repas actif(s), ${importedSnapshot.archive.length} dans l'historique.</p>
+                <button type="button" class="btn primary" id="import-snapshot-create">Créer une nouvelle liste avec cet aperçu</button>
+              </section>`
+            : importParam
+              ? `<section class="card"><p class="error">Le lien de partage figé est invalide ou corrompu.</p></section>`
+              : ""
+        }
 
         ${
           recents.length
@@ -95,6 +116,24 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
         const state = await createList(nameInput.value.trim() || "On mange quoi ?");
         touchRecentList(state.code, state.name);
         navigate(`/l/${state.code}`);
+      } catch (err) {
+        alert(err instanceof ApiError ? err.message : "Impossible de créer la liste. Vérifie ta connexion internet.");
+        btn.disabled = false;
+      }
+    });
+
+    root.querySelector("#import-snapshot-create")?.addEventListener("click", async (e) => {
+      if (!importedSnapshot || !importParam) return;
+      const btn = e.currentTarget as HTMLButtonElement;
+      btn.disabled = true;
+      try {
+        const created = await createList(importedSnapshot.name.trim() || "On mange quoi ?");
+        touchRecentList(created.code, created.name);
+        // Transmet le même paramètre à la vue Liste plutôt que d'y envoyer
+        // "importState" directement d'ici : un seul endroit (maybeHandleImportParam
+        // dans src/views/list.ts) décode et applique un lien figé, que la
+        // liste vienne d'être créée pour l'occasion ou qu'elle existait déjà.
+        navigate(`/l/${created.code}?import=${encodeURIComponent(importParam)}`);
       } catch (err) {
         alert(err instanceof ApiError ? err.message : "Impossible de créer la liste. Vérifie ta connexion internet.");
         btn.disabled = false;

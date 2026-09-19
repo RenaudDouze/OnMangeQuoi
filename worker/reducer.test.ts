@@ -621,6 +621,320 @@ describe("applyMessage: restoreMeal", () => {
   });
 });
 
+describe("applyMessage: importState", () => {
+  describe("mode replace", () => {
+    it("remplace entièrement meals/archive et le nom", () => {
+      const state = makeState({ meals: [makeMeal({ id: "old", title: "Ancien" })] });
+      applyMessage(
+        state,
+        {
+          type: "importState",
+          mode: "replace",
+          data: {
+            name: "Liste importée",
+            meals: [makeMeal({ id: "n1", title: "Nouveau" })],
+            archive: [makeMeal({ id: "n2", title: "Archivé", status: "fait" })],
+          },
+        },
+        NOW,
+      );
+      expect(state.name).toBe("Liste importée");
+      expect(state.meals.map((m) => m.id)).toEqual(["n1"]);
+      expect(state.archive.map((m) => m.id)).toEqual(["n2"]);
+    });
+
+    it("garde le nom actuel si le nom importé est fait uniquement d'espaces", () => {
+      const state = makeState({ name: "Nom actuel" });
+      applyMessage(
+        state,
+        { type: "importState", mode: "replace", data: { name: "   ", meals: [], archive: [] } },
+        NOW,
+      );
+      expect(state.name).toBe("Nom actuel");
+    });
+
+    it("garde le nom actuel si le nom importé est une chaîne vide", () => {
+      const state = makeState({ name: "Nom actuel" });
+      applyMessage(state, { type: "importState", mode: "replace", data: { name: "", meals: [], archive: [] } }, NOW);
+      expect(state.name).toBe("Nom actuel");
+    });
+
+    it("ne plante pas si le nom importé est absent (message malformé)", () => {
+      const state = makeState({ name: "Nom actuel" });
+      const data = { name: undefined, meals: [], archive: [] } as unknown as { name: string; meals: Meal[]; archive: Meal[] };
+      expect(() => applyMessage(state, { type: "importState", mode: "replace", data }, NOW)).not.toThrow();
+      expect(state.name).toBe("Nom actuel");
+    });
+
+    it("écarte un repas archivé dont le titre est vide une fois nettoyé", () => {
+      const state = makeState();
+      applyMessage(
+        state,
+        { type: "importState", mode: "replace", data: { name: "L", meals: [], archive: [makeMeal({ title: "   " })] } },
+        NOW,
+      );
+      expect(state.archive).toEqual([]);
+    });
+
+    it("regénère un id invalide plutôt que de le recopier", () => {
+      const state = makeState();
+      applyMessage(
+        state,
+        { type: "importState", mode: "replace", data: { name: "L", meals: [makeMeal({ id: "id invalide !" })], archive: [] } },
+        NOW,
+      );
+      expect(state.meals[0].id).not.toBe("id invalide !");
+      expect(state.meals[0].id).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+    });
+
+    it("regénère un id qui n'est pas une chaîne, même s'il ressemblerait à un id valide une fois converti en texte", () => {
+      const state = makeState();
+      const raw = { ...makeMeal(), id: 123456 } as unknown as Meal;
+      applyMessage(state, { type: "importState", mode: "replace", data: { name: "L", meals: [raw], archive: [] } }, NOW);
+      expect(typeof state.meals[0].id).toBe("string");
+      expect(state.meals[0].id).not.toBe(123456);
+    });
+
+    it("garde un id déjà valide", () => {
+      const state = makeState();
+      applyMessage(
+        state,
+        { type: "importState", mode: "replace", data: { name: "L", meals: [makeMeal({ id: "valid-id_1" })], archive: [] } },
+        NOW,
+      );
+      expect(state.meals[0].id).toBe("valid-id_1");
+    });
+
+    it("écarte un repas dont le titre est vide une fois nettoyé", () => {
+      const state = makeState();
+      applyMessage(
+        state,
+        { type: "importState", mode: "replace", data: { name: "L", meals: [makeMeal({ title: "   " })], archive: [] } },
+        NOW,
+      );
+      expect(state.meals).toEqual([]);
+    });
+
+    it("écarte un repas dont le titre n'est pas une chaîne", () => {
+      const state = makeState();
+      const raw = { ...makeMeal(), title: 42 } as unknown as Meal;
+      applyMessage(state, { type: "importState", mode: "replace", data: { name: "L", meals: [raw], archive: [] } }, NOW);
+      expect(state.meals).toEqual([]);
+    });
+
+    it("retombe sur des valeurs par défaut pour les champs invalides/absents", () => {
+      const state = makeState();
+      const raw = {
+        id: "m1",
+        title: "Repas",
+        status: "statut-invalide",
+        note: "note-invalide",
+        source: 42,
+        comment: null,
+        createdAt: "pas un nombre",
+        doneAt: "pas un nombre",
+        images: "pas un tableau",
+        prepTime: "preptime-invalide",
+        plannedDate: "pas un nombre",
+      } as unknown as Meal;
+      applyMessage(state, { type: "importState", mode: "replace", data: { name: "L", meals: [raw], archive: [] } }, NOW);
+      const meal = state.meals[0];
+      expect(meal.status).toBe("idee");
+      expect(meal.note).toBeNull();
+      expect(meal.source).toBe("");
+      expect(meal.comment).toBe("");
+      expect(meal.createdAt).toBe(NOW);
+      expect(meal.updatedAt).toBe(NOW);
+      expect(meal.doneAt).toBeNull();
+      expect(meal.images).toEqual([]);
+      expect(meal.prepTime).toBeNull();
+      expect(meal.plannedDate).toBeNull();
+    });
+
+    it("conserve les valeurs valides (statut, note, temps de préparation, dates, photos)", () => {
+      const state = makeState();
+      const raw = makeMeal({
+        id: "m1",
+        title: "Repas",
+        status: "validee",
+        note: "quand_tu_veux",
+        source: "https://exemple.fr",
+        comment: "Un commentaire",
+        createdAt: 111,
+        doneAt: 222,
+        images: ["img1", "img2"],
+        prepTime: "rapide",
+        plannedDate: 333,
+      });
+      applyMessage(state, { type: "importState", mode: "replace", data: { name: "L", meals: [raw], archive: [] } }, NOW);
+      const meal = state.meals[0];
+      expect(meal.status).toBe("validee");
+      expect(meal.note).toBe("quand_tu_veux");
+      expect(meal.source).toBe("https://exemple.fr");
+      expect(meal.comment).toBe("Un commentaire");
+      expect(meal.createdAt).toBe(111);
+      expect(meal.doneAt).toBe(222);
+      expect(meal.images).toEqual(["img1", "img2"]);
+      expect(meal.prepTime).toBe("rapide");
+      expect(meal.plannedDate).toBe(333);
+    });
+
+    it("filtre les entrées non-chaînes d'images (y compris avant la troncature)", () => {
+      const state = makeState();
+      // "42" est placé avant la fin pour distinguer filtrer-puis-tronquer de
+      // tronquer-seul : si on ne filtrait pas, il resterait dans le résultat.
+      const raw = makeMeal({ images: ["img1", 42, "img2", null] as unknown as string[] });
+      applyMessage(state, { type: "importState", mode: "replace", data: { name: "L", meals: [raw], archive: [] } }, NOW);
+      expect(state.meals[0].images).toEqual(["img1", "img2"]);
+    });
+
+    it("plafonne les images à MAX_IMAGES_PER_MEAL", () => {
+      const state = makeState();
+      const tooMany = Array.from({ length: MAX_IMAGES_PER_MEAL + 5 }, (_, i) => `img${i}`);
+      const raw = makeMeal({ images: tooMany });
+      applyMessage(state, { type: "importState", mode: "replace", data: { name: "L", meals: [raw], archive: [] } }, NOW);
+      expect(state.meals[0].images).toEqual(tooMany.slice(0, MAX_IMAGES_PER_MEAL));
+    });
+
+    it("tronque le titre, la source et le commentaire aux longueurs maximales", () => {
+      const state = makeState();
+      const raw = makeMeal({
+        title: "T".repeat(MAX_TITLE_LENGTH + 10),
+        source: "S".repeat(MAX_SOURCE_LENGTH + 10),
+        comment: "C".repeat(MAX_COMMENT_LENGTH + 10),
+      });
+      applyMessage(state, { type: "importState", mode: "replace", data: { name: "L", meals: [raw], archive: [] } }, NOW);
+      const meal = state.meals[0];
+      expect(meal.title).toHaveLength(MAX_TITLE_LENGTH);
+      expect(meal.source).toHaveLength(MAX_SOURCE_LENGTH);
+      expect(meal.comment).toHaveLength(MAX_COMMENT_LENGTH);
+    });
+
+    it("tronque le nom de liste importé à MAX_LIST_NAME_LENGTH", () => {
+      const state = makeState();
+      applyMessage(
+        state,
+        { type: "importState", mode: "replace", data: { name: "N".repeat(MAX_LIST_NAME_LENGTH + 10), meals: [], archive: [] } },
+        NOW,
+      );
+      expect(state.name).toHaveLength(MAX_LIST_NAME_LENGTH);
+    });
+
+    it("plafonne le total importé à MAX_MEALS_TOTAL, priorité aux repas actifs", () => {
+      const state = makeState();
+      const meals = Array.from({ length: MAX_MEALS_TOTAL - 1 }, (_, i) => makeMeal({ id: `m${i}`, title: `M${i}` }));
+      const archive = [makeMeal({ id: "a1", title: "A1" }), makeMeal({ id: "a2", title: "A2" })];
+      applyMessage(state, { type: "importState", mode: "replace", data: { name: "L", meals, archive } }, NOW);
+      expect(state.meals).toHaveLength(MAX_MEALS_TOTAL - 1);
+      expect(state.archive).toHaveLength(1);
+      expect(state.archive[0].id).toBe("a1");
+    });
+
+    it("n'importe aucun repas archivé si les repas actifs seuls atteignent déjà le plafond", () => {
+      const state = makeState();
+      const meals = Array.from({ length: MAX_MEALS_TOTAL + 5 }, (_, i) => makeMeal({ id: `m${i}`, title: `M${i}` }));
+      applyMessage(
+        state,
+        { type: "importState", mode: "replace", data: { name: "L", meals, archive: [makeMeal({ id: "a1", title: "A1" })] } },
+        NOW,
+      );
+      expect(state.meals).toHaveLength(MAX_MEALS_TOTAL);
+      expect(state.archive).toEqual([]);
+    });
+  });
+
+  describe("mode merge", () => {
+    it("ajoute les nouveaux repas actifs et archivés à la suite de l'existant", () => {
+      const state = makeState({ meals: [makeMeal({ id: "e1", title: "Existant" })] });
+      applyMessage(
+        state,
+        {
+          type: "importState",
+          mode: "merge",
+          data: { name: "L", meals: [makeMeal({ id: "n1", title: "Nouveau" })], archive: [makeMeal({ id: "n2", title: "Archivé" })] },
+        },
+        NOW,
+      );
+      expect(state.meals.map((m) => m.id)).toEqual(["e1", "n1"]);
+      expect(state.archive.map((m) => m.id)).toEqual(["n2"]);
+      expect(state.meals[1].order).toBe(1);
+    });
+
+    it("ignore un titre déjà présent parmi les repas actifs, insensible à la casse et aux espaces", () => {
+      const state = makeState({ meals: [makeMeal({ id: "e1", title: "Tartiflette" })] });
+      applyMessage(
+        state,
+        { type: "importState", mode: "merge", data: { name: "L", meals: [makeMeal({ id: "n1", title: "  tartiflette  " })], archive: [] } },
+        NOW,
+      );
+      expect(state.meals).toHaveLength(1);
+    });
+
+    it("ignore un titre déjà présent parmi les repas archivés", () => {
+      const state = makeState({ archive: [makeMeal({ id: "e1", title: "Tartiflette", status: "fait" })] });
+      applyMessage(
+        state,
+        { type: "importState", mode: "merge", data: { name: "L", meals: [makeMeal({ id: "n1", title: "Tartiflette" })], archive: [] } },
+        NOW,
+      );
+      expect(state.meals).toEqual([]);
+    });
+
+    it("n'ajoute pas un repas dont le titre est vide une fois nettoyé", () => {
+      const state = makeState();
+      applyMessage(state, { type: "importState", mode: "merge", data: { name: "L", meals: [makeMeal({ title: "  " })], archive: [] } }, NOW);
+      expect(state.meals).toEqual([]);
+    });
+
+    it("ne dédoublonne pas deux repas de même titre au sein du fichier importé lui-même", () => {
+      const state = makeState();
+      applyMessage(
+        state,
+        {
+          type: "importState",
+          mode: "merge",
+          data: { name: "L", meals: [makeMeal({ id: "n1", title: "Tartiflette" }), makeMeal({ id: "n2", title: "Tartiflette" })], archive: [] },
+        },
+        NOW,
+      );
+      expect(state.meals).toHaveLength(2);
+    });
+
+    it("s'arrête d'importer une fois le plafond MAX_MEALS_TOTAL atteint", () => {
+      const state = makeState({ meals: Array.from({ length: MAX_MEALS_TOTAL - 1 }, (_, i) => makeMeal({ id: `m${i}`, title: `M${i}` })) });
+      applyMessage(
+        state,
+        {
+          type: "importState",
+          mode: "merge",
+          data: { name: "L", meals: [makeMeal({ id: "n1", title: "N1" }), makeMeal({ id: "n2", title: "N2" })], archive: [] },
+        },
+        NOW,
+      );
+      expect(state.meals).toHaveLength(MAX_MEALS_TOTAL);
+    });
+
+    it("compte le plafond MAX_MEALS_TOTAL sur repas actifs + archivés combinés, pas l'un ou l'autre seul", () => {
+      const state = makeState({
+        meals: Array.from({ length: MAX_MEALS_TOTAL - 5 }, (_, i) => makeMeal({ id: `m${i}`, title: `M${i}` })),
+        archive: Array.from({ length: 10 }, (_, i) => makeMeal({ id: `a${i}`, title: `A${i}`, status: "fait" })),
+      });
+      applyMessage(
+        state,
+        { type: "importState", mode: "merge", data: { name: "L", meals: [makeMeal({ id: "n1", title: "Nouveau" })], archive: [] } },
+        NOW,
+      );
+      expect(state.meals.some((m) => m.title === "Nouveau")).toBe(false);
+    });
+
+    it("ne touche pas au nom de la liste", () => {
+      const state = makeState({ name: "Nom actuel" });
+      applyMessage(state, { type: "importState", mode: "merge", data: { name: "Autre nom", meals: [], archive: [] } }, NOW);
+      expect(state.name).toBe("Nom actuel");
+    });
+  });
+});
+
 describe("applyMessage: reorderMeals", () => {
   it("applique le nouvel ordre aux ids connus", () => {
     const state = makeState();

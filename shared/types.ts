@@ -111,6 +111,11 @@ export type ClientMessage =
   | { type: "deleteMeal"; id: string }
   | { type: "reorderMeals"; orderedIds: string[] }
   | { type: "restoreMeal"; id: string }
-  | { type: "deleteArchivedMeal"; id: string };
+  | { type: "deleteArchivedMeal"; id: string }
+  // Fichier JSON exporté (src/lib/importExport.ts) ou lien/QR figé décodé
+  // (src/lib/compactShare.ts) : dans les deux cas, une donnée externe jamais
+  // passée par un formulaire validé un par un — voir la revalidation dans
+  // worker/reducer.ts, identique à celle d'un message forgé à la main.
+  | { type: "importState"; mode: "merge" | "replace"; data: Pick<ListState, "meals" | "archive" | "name"> };
 
 export type ServerMessage = { type: "state"; state: ListState } | { type: "error"; message: string };

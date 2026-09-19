@@ -26,6 +26,8 @@ import { icons } from "../lib/icons";
 import { appPath } from "../lib/basePath";
 import { renderQrSvg } from "../lib/qr";
 import { computeHistoryStats } from "../lib/historyStats";
+import { exportListState, parseImportFile, type ImportPayload } from "../lib/importExport";
+import { encodeSnapshotToParam, decodeSnapshotFromParam } from "../lib/compactShare";
 import Sortable from "sortablejs";
 
 const URL_RE = /^(https?:\/\/|www\.)/i;
@@ -291,6 +293,56 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
   (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement)?.focus();
 }
 
+/** Choix fusionner/remplacer après un import JSON (menu "Exporter/Importer",
+ * voir wireHeader) ou un lien/QR figé décodé (voir maybeHandleImportParam) —
+ * un seul point d'entrée pour les deux origines, qui envoient ensuite le
+ * même message "importState" (voir shared/types.ts et worker/reducer.ts,
+ * qui revalide de toute façon tout champ importé, quelle que soit son
+ * origine). */
+function openImportModal(data: ImportPayload, onImport: (mode: "merge" | "replace", data: ImportPayload) => void): void {
+  const triggerEl = document.activeElement;
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  const total = data.meals.length + data.archive.length;
+  overlay.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="import-title" tabindex="-1">
+      <button type="button" class="icon-btn modal-close" aria-label="Fermer">${icons.close}</button>
+      <h2 id="import-title">Importer${data.name ? ` « ${escapeHtml(data.name)} »` : ""}</h2>
+      <p class="modal-hint">${total} repas trouvé(s) (${data.meals.length} actif(s), ${data.archive.length} dans l'historique).</p>
+      <div class="stacked-actions">
+        <button type="button" class="btn primary" id="import-merge">Fusionner avec la liste actuelle</button>
+        <button type="button" class="btn danger" id="import-replace">Remplacer la liste actuelle</button>
+        <button type="button" class="btn" id="import-cancel">Annuler</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const untrap = trapFocus(overlay, triggerEl);
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", onKeydown);
+    untrap();
+  };
+  function onKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape") close();
+  }
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+  document.addEventListener("keydown", onKeydown);
+  overlay.querySelector(".modal-close")?.addEventListener("click", close);
+  overlay.querySelector("#import-cancel")?.addEventListener("click", close);
+  overlay.querySelector("#import-merge")?.addEventListener("click", () => {
+    close();
+    onImport("merge", data);
+  });
+  overlay.querySelector("#import-replace")?.addEventListener("click", () => {
+    if (confirm("Remplacer entièrement la liste actuelle par le contenu importé ?")) {
+      close();
+      onImport("replace", data);
+    }
+  });
+}
+
 /** Affiche une image en plein écran (clic sur une miniature de la galerie,
  * voir mealImageFieldHtml/wireMealImage) : overlay sombre, fermeture au clic
  * n'importe où dessus, sur Échap, ou sur le bouton fermer — même mécanique
@@ -523,6 +575,9 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <button type="button" class="btn-link" id="filter-toggle-btn" aria-pressed="false">Filtrer</button>
         <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
         <button type="button" class="btn-link" id="btn-share">Partager</button>
+        <button type="button" class="btn-link" id="btn-export">Exporter (JSON)</button>
+        <button type="button" class="btn-link" id="btn-import">Importer (JSON)</button>
+        <input type="file" id="import-file-input" accept="application/json" hidden />
       </div>
       <div class="share-panel" id="share-panel" hidden>
         <p>Code : <strong id="share-code">${state.code}</strong></p>
@@ -530,6 +585,14 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <button type="button" class="btn" id="copy-name">Copier le nom</button>
         <button type="button" class="btn" id="copy-code">Copier le code</button>
         <button type="button" class="btn" id="copy-link">Copier le lien</button>
+        <hr class="share-panel-divider" />
+        <p class="modal-hint">
+          Partage figé : un instantané des repas actuels (actifs et historique), sans code ni
+          synchronisation en direct — pratique à envoyer par message ou à archiver.
+        </p>
+        <button type="button" class="btn" id="btn-snapshot-link">Générer un lien + QR figés</button>
+        <div class="qr-wrap" id="snapshot-qr-wrap" aria-label="QR code figé" hidden></div>
+        <button type="button" class="btn" id="copy-snapshot-link" hidden>Copier le lien figé</button>
       </div>
 
       <nav class="tabs" id="tabs">
@@ -687,6 +750,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       wireToolbar();
       wireMealList();
       shellMounted = true;
+      maybeHandleImportParam();
     } else {
       updateTitle();
     }
@@ -758,6 +822,28 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         if (qrWrap) qrWrap.innerHTML = svg;
       });
     }
+
+    root.querySelector("#btn-snapshot-link")?.addEventListener("click", () => void generateSnapshotShare());
+
+    root.querySelector("#btn-export")?.addEventListener("click", () => {
+      if (state) exportListState(state);
+      closeActionMenu();
+    });
+    const importInput = root.querySelector<HTMLInputElement>("#import-file-input");
+    root.querySelector("#btn-import")?.addEventListener("click", () => {
+      importInput?.click();
+      closeActionMenu();
+    });
+    importInput?.addEventListener("change", async () => {
+      const file = importInput.files?.[0];
+      importInput.value = "";
+      if (!file) return;
+      try {
+        openImportModal(await parseImportFile(file), (mode, data) => conn.send({ type: "importState", mode, data }));
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Import impossible.");
+      }
+    });
 
     const titleEl = root.querySelector("#list-title") as HTMLElement | null;
     if (titleEl) {
@@ -1055,6 +1141,57 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       () => showToast(message),
       () => showToast("Impossible de copier."),
     );
+  }
+
+  /** Encode un instantané de la liste actuelle (repas actifs + historique)
+   * dans un lien "?import=…" + son QR — distinct du lien de partage en
+   * direct ci-dessus (#qr-wrap) : celui-ci ne donne accès à aucun code, ne
+   * synchronise rien, et pointe vers l'accueil plutôt que vers cette liste
+   * (voir mountHomeView, qui propose d'en créer une nouvelle à partir de cet
+   * instantané). */
+  async function generateSnapshotShare(): Promise<void> {
+    if (!state) return;
+    const payload: ImportPayload = { name: state.name, meals: state.meals, archive: state.archive };
+    const url = new URL(`${location.origin}${appPath("/")}`);
+    url.searchParams.set("import", encodeSnapshotToParam(payload));
+    const qrWrap = root.querySelector("#snapshot-qr-wrap") as HTMLElement | null;
+    const copyBtn = root.querySelector<HTMLButtonElement>("#copy-snapshot-link");
+    try {
+      const svg = await renderQrSvg(url.toString());
+      if (qrWrap) {
+        qrWrap.innerHTML = svg;
+        qrWrap.hidden = false;
+      }
+      if (copyBtn) {
+        copyBtn.hidden = false;
+        copyBtn.onclick = () => copyToClipboard(url.toString(), "Lien figé copié.");
+      }
+    } catch {
+      showToast("Liste trop volumineuse pour un lien/QR figé — utilise plutôt l'export JSON.");
+    }
+  }
+
+  /** Un lien de partage figé (voir generateSnapshotShare) pointe vers
+   * l'accueil sans code : ouvert alors qu'une liste est déjà affichée (lien
+   * réutilisé tel quel, ou reçu via mountHomeView qui recrée une liste puis
+   * transmet le même paramètre — voir son bouton "Créer une nouvelle liste
+   * avec cet aperçu"), il propose ici le même choix fusionner/remplacer que
+   * l'import JSON, plutôt que de dupliquer un autre écran. Appelé une seule
+   * fois (voir shellMounted) : sans quoi une mise à jour temps réel reçue
+   * juste après rouvrirait la modale en boucle. */
+  function maybeHandleImportParam(): void {
+    const params = new URLSearchParams(location.search);
+    const raw = params.get("import");
+    if (!raw) return;
+    params.delete("import");
+    const query = params.toString();
+    history.replaceState({}, "", `${location.pathname}${query ? `?${query}` : ""}`);
+    const data = decodeSnapshotFromParam(raw);
+    if (!data) {
+      showToast("Le lien de partage figé est invalide ou corrompu.");
+      return;
+    }
+    openImportModal(data, (mode, imported) => conn.send({ type: "importState", mode, data: imported }));
   }
 
   /** Repas actuellement affichés (onglet + recherche), dans l'ordre affiché
