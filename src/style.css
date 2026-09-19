@@ -638,6 +638,16 @@ button:focus-visible,
   padding: 8px;
 }
 
+/* Sépare le partage en direct (code/QR de la liste) du partage figé
+   (lien/QR encodant un instantané, voir #btn-snapshot-link) : deux
+   mécanismes distincts, pas seulement deux boutons de plus. */
+.share-panel-divider {
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.2rem 0;
+}
+
 .tabs {
   display: flex;
   gap: 0.5rem;
