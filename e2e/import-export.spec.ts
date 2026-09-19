@@ -1,7 +1,11 @@
 import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 
-test("exporter la liste télécharge un JSON, importable en fusion (dédoublonné par titre) ou en remplacement", async ({ page }) => {
+test("exporter la liste télécharge un JSON, importable en fusion (dédoublonné par titre) ou en remplacement, et partageable par lien/QR figé", async ({
+  page,
+}) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
   await page.waitForURL(/\/l\//);
@@ -57,21 +61,12 @@ test("exporter la liste télécharge un JSON, importable en fusion (dédoublonn�
   await page.click("#import-replace");
   await expect(page.locator(".meal-card")).toHaveCount(1);
   await expect(page.locator(".meal-title")).toHaveText("Couscous");
-});
 
-test("le lien/QR de partage figé, ouvert depuis l'accueil, propose de créer une nouvelle liste avec son contenu", async ({ page }) => {
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-
-  await page.goto("/");
-  await page.fill("#create-name", "Liste source");
-  await page.click("#create-form button[type=submit]");
-  await page.waitForURL(/\/l\//);
-  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
-
-  await page.fill("#add-title", "Tartiflette");
-  await page.click("#add-form button[type=submit]");
-  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
-
+  // Lien/QR de partage figé : un instantané de CETTE liste (pas une liste à
+  // part — réutilisée pour ne pas cumuler les créations de liste dans la
+  // même fenêtre de la limite de débit locale, voir CLAUDE.md), sans code
+  // ni synchronisation, ouvert depuis l'accueil pour créer une nouvelle
+  // liste à partir de son contenu.
   await page.click("#menu-toggle-btn");
   await page.click("#btn-share");
   await page.click("#btn-snapshot-link");
@@ -93,7 +88,7 @@ test("le lien/QR de partage figé, ouvert depuis l'accueil, propose de créer un
   await expect(page.locator(".modal")).toBeVisible();
   await expect(page.locator(".modal")).toContainText("1 repas trouvé");
   await page.click("#import-merge");
-  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+  await expect(page.locator(".meal-title")).toHaveText("Couscous");
   // La nouvelle liste a bien un code différent de la liste source (partage
   // figé, pas rejoint la liste en direct).
   expect(page.url().split("/l/")[1]).not.toBe(code);
