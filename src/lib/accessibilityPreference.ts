@@ -4,7 +4,7 @@
 // animations réduites — voir style.css, sélecteurs [data-a11y]).
 const KEY = "omq:a11y";
 
-export function getA11yPreference(): boolean {
+export function getAccessibilityPreference(): boolean {
   try {
     return localStorage.getItem(KEY) === "true";
   } catch {
@@ -12,15 +12,15 @@ export function getA11yPreference(): boolean {
   }
 }
 
-export function applyA11y(enabled: boolean): void {
+export function applyAccessibilityPreference(enabled: boolean): void {
   document.documentElement.toggleAttribute("data-a11y", enabled);
 }
 
-export function setA11yPreference(enabled: boolean): void {
+export function setAccessibilityPreference(enabled: boolean): void {
   try {
     localStorage.setItem(KEY, String(enabled));
   } catch {
     // stockage indisponible, la préférence ne persistera pas au rechargement
   }
-  applyA11y(enabled);
+  applyAccessibilityPreference(enabled);
 }
