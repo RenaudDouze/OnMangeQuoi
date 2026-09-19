@@ -3,7 +3,7 @@ import { getRecentLists, forgetRecentList, touchRecentList } from "../lib/storag
 import { escapeHtml } from "../lib/dom";
 import { icons } from "../lib/icons";
 import { cycleThemePreference, getThemePreference, themeLabel, type ThemePreference } from "../lib/theme";
-import { getA11yPreference, setA11yPreference } from "../lib/a11y";
+import { getAccessibilityPreference, setAccessibilityPreference } from "../lib/accessibilityPreference";
 import { decodeSnapshotFromParam } from "../lib/compactShare";
 import { MAX_LIST_NAME_LENGTH } from "../../shared/types";
 
@@ -34,7 +34,7 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
   function render(): void {
     const recents = getRecentLists();
     const theme = getThemePreference();
-    const a11yEnabled = getA11yPreference();
+    const a11yEnabled = getAccessibilityPreference();
     root.innerHTML = `
       <div class="home">
         <button type="button" class="icon-btn a11y-toggle" id="a11y-toggle" aria-pressed="${a11yEnabled}" aria-label="Mode accessibilité : ${a11yEnabled ? "activé" : "désactivé"}" title="Mode accessibilité (texte et zones plus grands, contraste renforcé, animations réduites)">
@@ -102,7 +102,7 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
     });
 
     root.querySelector("#a11y-toggle")?.addEventListener("click", () => {
-      setA11yPreference(!a11yEnabled);
+      setAccessibilityPreference(!a11yEnabled);
       render();
     });
 
