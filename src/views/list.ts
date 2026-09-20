@@ -18,6 +18,8 @@ import { ListConnection } from "../lib/ws";
 import { ApiError, fetchListState, uploadMealImage, deleteMealImage, mealImageUrl } from "../lib/http";
 import { cacheListState, getCachedListState, touchRecentList } from "../lib/storage";
 import { getSortByStatus, setSortByStatus } from "../lib/sortPreference";
+import { getNotificationPreference, setNotificationPreference } from "../lib/notificationPreference";
+import { diffForNotifications, type NotificationEvent } from "../lib/notificationDiff";
 import { uid } from "../lib/id";
 import { escapeHtml, onActivate, trapFocus } from "../lib/dom";
 import { startEdit } from "../lib/editable";
@@ -574,6 +576,7 @@ function layoutHtml(state: ListState, connected: boolean): string {
         <button type="button" class="btn-link" id="sort-toggle-btn" aria-pressed="false">Trier par statut</button>
         <button type="button" class="btn-link" id="filter-toggle-btn" aria-pressed="false">Filtrer</button>
         <button type="button" class="btn-link" id="toggle-all-btn" hidden>Tout déplier</button>
+        <button type="button" class="btn-link" id="notif-toggle-btn" aria-pressed="false">Activer les notifications</button>
         <button type="button" class="btn-link" id="btn-share">Partager</button>
         <button type="button" class="btn-link" id="btn-export">Exporter (JSON)</button>
         <button type="button" class="btn-link" id="btn-import">Importer (JSON)</button>
@@ -676,13 +679,28 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   // liste).
   const expandedIds = new Set<string>();
   const conn = new ListConnection(code);
+  // Repas dont cet appareil vient lui-même d'envoyer la mutation (voir
+  // markOwnMutation) : exclus du prochain diff de notifications, pour ne
+  // pas se notifier de ses propres actions. Vidé après chaque état reçu.
+  let pendingOwnMealIds = new Set<string>();
+  // Le premier "state" reçu par WebSocket ne fait que synchroniser l'état
+  // déjà affiché (chargement initial, éventuellement depuis un cache
+  // vieux de plusieurs jours) : jamais diffé pour les notifications, sous
+  // peine de rejouer d'un coup toute l'activité manquée pendant l'absence.
+  let hasReceivedFirstWsState = false;
 
   function onStateUpdate(next: ListState) {
+    const previous = state;
     state = next;
     loading = false;
     notFound = false;
     cacheListState(next);
     touchRecentList(next.code, next.name);
+    if (hasReceivedFirstWsState && previous) {
+      notifyStateChanges(previous, next, pendingOwnMealIds);
+    }
+    pendingOwnMealIds = new Set();
+    hasReceivedFirstWsState = true;
     render();
   }
 
@@ -748,6 +766,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       wireFilters();
       wireTabs();
       wireToolbar();
+      wireNotificationToggle();
       wireMealList();
       shellMounted = true;
       maybeHandleImportParam();
@@ -839,7 +858,10 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       importInput.value = "";
       if (!file) return;
       try {
-        openImportModal(await parseImportFile(file), (mode, data) => conn.send({ type: "importState", mode, data }));
+        openImportModal(await parseImportFile(file), (mode, data) => {
+          markOwnMutation([...data.meals, ...data.archive].map((m) => m.id));
+          conn.send({ type: "importState", mode, data });
+        });
       } catch (err) {
         showToast(err instanceof Error ? err.message : "Import impossible.");
       }
@@ -1022,6 +1044,111 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     updateSortToggleBtn();
   }
 
+  /** Vrai seulement si la préférence de cet appareil ET la permission
+   * navigateur sont toutes les deux accordées — la préférence seule ne
+   * suffit pas (l'utilisateur a pu la refuser depuis les réglages du
+   * navigateur après l'avoir activée ici, ou la fonctionnalité peut être
+   * absente de ce navigateur). */
+  function notificationsActive(): boolean {
+    return typeof Notification !== "undefined" && Notification.permission === "granted" && getNotificationPreference();
+  }
+
+  function updateNotifToggleBtn(): void {
+    const btn = root.querySelector("#notif-toggle-btn") as HTMLButtonElement | null;
+    if (!btn) return;
+    if (typeof Notification === "undefined") {
+      btn.hidden = true;
+      return;
+    }
+    const active = notificationsActive();
+    btn.setAttribute("aria-pressed", String(active));
+    btn.textContent = active ? "Désactiver les notifications" : "Activer les notifications";
+    btn.title =
+      Notification.permission === "denied"
+        ? "Bloquées par le navigateur : autorise-les dans ses réglages pour ce site."
+        : "Prévient cet appareil d'un nouveau repas ou d'un changement de statut fait par un autre appareil, tant qu'un onglet de cette liste reste ouvert.";
+  }
+
+  /** Case "Notifications" du menu d'actions : contrairement au thème ou au
+   * mode accessibilité (préférences globales, voir home.ts), propre à
+   * chaque liste ouverte plutôt qu'à l'appareil entier — s'active donc
+   * depuis la liste elle-même, où la demande de permission au navigateur a
+   * un contexte clair. Ne fonctionne que tant qu'un onglet de cette liste
+   * reste ouvert (même en arrière-plan) : contrairement à une vraie
+   * notification push, rien ne réveille l'appareil si l'onglet est fermé —
+   * voir notifyStateChanges/diffForNotifications. */
+  function wireNotificationToggle(): void {
+    const btn = root.querySelector("#notif-toggle-btn") as HTMLButtonElement | null;
+    btn?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (typeof Notification === "undefined") return;
+      if (notificationsActive()) {
+        setNotificationPreference(false);
+        updateNotifToggleBtn();
+        closeActionMenu();
+        return;
+      }
+      if (Notification.permission === "denied") {
+        showToast("Notifications bloquées : autorise-les dans les réglages du navigateur pour ce site.");
+        closeActionMenu();
+        return;
+      }
+      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+      setNotificationPreference(permission === "granted");
+      showToast(permission === "granted" ? "Notifications activées pour cette liste." : "Notifications refusées.");
+      updateNotifToggleBtn();
+      closeActionMenu();
+    });
+    updateNotifToggleBtn();
+  }
+
+  /** Marque ces repas comme venant d'être mutés par cet appareil (voir
+   * pendingOwnMealIds) : appelé juste avant/après chaque conn.send()
+   * susceptible de créer un repas ou de changer son statut, pour que le
+   * prochain diff de notifications ne se notifie pas de sa propre action. */
+  function markOwnMutation(mealIds: string[]): void {
+    for (const id of mealIds) pendingOwnMealIds.add(id);
+  }
+
+  /** Affiche une notification navigateur, via le service worker déjà
+   * enregistré si l'app en a un (nécessaire sur certains navigateurs
+   * mobiles, où `new Notification()` lève une exception), sinon
+   * directement. `getRegistration()` (jamais `.ready`, qui resterait en
+   * attente indéfiniment tant qu'aucun service worker n'est enregistré —
+   * le cas en dev/e2e, voir vite.config.ts) résout immédiatement, avec ou
+   * sans service worker actif. Toujours best-effort : une notification
+   * manquée n'est pas une erreur pour le reste de l'app. */
+  async function showBrowserNotification(title: string, body: string): Promise<void> {
+    const options: NotificationOptions = { body, icon: appPath("/icon-192.png"), tag: `${code}-activity` };
+    try {
+      const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
+      if (registration) {
+        await registration.showNotification(title, options);
+        return;
+      }
+    } catch {
+      // tombe sur le fallback ci-dessous
+    }
+    try {
+      new Notification(title, options);
+    } catch {
+      // best-effort : certains navigateurs (mobile) n'exposent que showNotification via le service worker
+    }
+  }
+
+  function notificationEventText(event: NotificationEvent): string {
+    if (event.kind === "added") return `${event.meal.title} a été ajouté à la liste.`;
+    return `${event.meal.title} : ${MEAL_STATUS_LABELS[event.meal.status]}`;
+  }
+
+  function notifyStateChanges(previous: ListState, next: ListState, skipMealIds: ReadonlySet<string>): void {
+    if (!notificationsActive()) return;
+    const events = diffForNotifications(previous, next, skipMealIds);
+    for (const event of events) {
+      void showBrowserNotification(next.name, notificationEventText(event));
+    }
+  }
+
   /** Réordonner la liste active à la main : glisser une carte par sa
    * poignée (`.drag-handle`, le bouton chevron — absente sur l'historique,
    * qui n'est jamais réordonnable — SortableJS n'a donc rien à saisir côté
@@ -1107,7 +1234,9 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       suggestionsEl.hidden = false;
       suggestionsEl.querySelectorAll<HTMLButtonElement>(".add-suggestion").forEach((btn) => {
         btn.addEventListener("click", () => {
-          conn.send({ type: "restoreMeal", id: btn.dataset.id! });
+          const id = btn.dataset.id!;
+          markOwnMutation([id]);
+          conn.send({ type: "restoreMeal", id });
           input.value = "";
           hideSuggestions();
           input.focus();
@@ -1129,7 +1258,9 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       e.preventDefault();
       const title = input.value.trim();
       if (!title) return;
-      conn.send({ type: "addMeal", id: uid(), title });
+      const id = uid();
+      markOwnMutation([id]);
+      conn.send({ type: "addMeal", id, title });
       input.value = "";
       hideSuggestions();
       input.focus();
@@ -1191,7 +1322,10 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       showToast("Le lien de partage figé est invalide ou corrompu.");
       return;
     }
-    openImportModal(data, (mode, imported) => conn.send({ type: "importState", mode, data: imported }));
+    openImportModal(data, (mode, imported) => {
+      markOwnMutation([...imported.meals, ...imported.archive].map((m) => m.id));
+      conn.send({ type: "importState", mode, data: imported });
+    });
   }
 
   /** Repas actuellement affichés (onglet + recherche), dans l'ordre affiché
@@ -1430,13 +1564,18 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
           const commentEl = card.querySelector<HTMLTextAreaElement>('[data-field="comment"]');
           const mealForModal = commentEl ? { ...meal, comment: commentEl.value } : meal;
           openMarkDoneModal(mealForModal, (note, comment, doneAt) => {
+            markOwnMutation([id]);
             conn.send({ type: "updateMeal", id, comment });
             conn.send({ type: "setMealNote", id, note });
             conn.send({ type: "setMealStatus", id, status: "fait", doneAt });
-            showUndoToast("Repas déplacé vers l'historique.", () => conn.send({ type: "restoreMeal", id }));
+            showUndoToast("Repas déplacé vers l'historique.", () => {
+              markOwnMutation([id]);
+              conn.send({ type: "restoreMeal", id });
+            });
           });
           return;
         }
+        markOwnMutation([id]);
         conn.send({ type: "setMealStatus", id, status });
       });
     });
@@ -1464,7 +1603,10 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     // de sécurité — même logique que pour "Repas déplacé vers l'historique".
     card.querySelector<HTMLButtonElement>('[data-action="delete"]')?.addEventListener("click", () => {
       conn.send({ type: "deleteMeal", id });
-      showUndoToast("Repas supprimé.", () => conn.send({ type: "restoreDeletedMeal", meal }));
+      showUndoToast("Repas supprimé.", () => {
+        markOwnMutation([id]);
+        conn.send({ type: "restoreDeletedMeal", meal });
+      });
     });
 
     const deleteForeverBtn = card.querySelector<HTMLButtonElement>('[data-action="delete-forever"]');
@@ -1476,6 +1618,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     }
 
     card.querySelector<HTMLButtonElement>('[data-action="restore"]')?.addEventListener("click", () => {
+      markOwnMutation([id]);
       conn.send({ type: "restoreMeal", id });
     });
 

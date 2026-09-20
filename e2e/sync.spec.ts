@@ -37,6 +37,73 @@ test("deux appareils sur la même liste se synchronisent en temps réel", async 
   await ctx2.close();
 });
 
+test("les notifications signalent un ajout ou un changement de statut fait par un autre appareil, jamais ses propres actions", async ({ browser }) => {
+  const ctx1 = await browser.newContext({ permissions: ["notifications"] });
+  const ctx2 = await browser.newContext();
+  const page1 = await ctx1.newPage();
+  const page2 = await ctx2.newPage();
+
+  // Espionne les notifications affichées sur page1 (celle qui les active) :
+  // aucun service worker n'est enregistré en dev (voir
+  // showBrowserNotification, src/views/list.ts), donc new Notification()
+  // est bien le chemin emprunté ici, pas registration.showNotification().
+  await page1.addInitScript(() => {
+    (window as unknown as { __notifications: { title: string; body: string }[] }).__notifications = [];
+    class FakeNotification {
+      static permission = "granted";
+      static requestPermission(): Promise<NotificationPermission> {
+        return Promise.resolve("granted");
+      }
+      constructor(title: string, options?: NotificationOptions) {
+        (window as unknown as { __notifications: { title: string; body: string }[] }).__notifications.push({
+          title,
+          body: options?.body ?? "",
+        });
+      }
+    }
+    Object.defineProperty(window, "Notification", { configurable: true, value: FakeNotification });
+  });
+
+  await page1.goto("/");
+  await page1.click("#create-form button[type=submit]");
+  await page1.waitForURL(/\/l\//);
+  const code = page1.url().split("/l/")[1];
+  await expect(page1.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page2.goto(`/l/${code}`);
+  await expect(page2.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page1.click("#menu-toggle-btn");
+  await page1.click("#notif-toggle-btn");
+  await expect(page1.locator("#notif-toggle-btn")).toHaveAttribute("aria-pressed", "true");
+
+  const notifications = () =>
+    page1.evaluate(() => (window as unknown as { __notifications: { title: string; body: string }[] }).__notifications);
+
+  // Sa propre action (ajouter un repas) ne se notifie pas elle-même.
+  await page1.fill("#add-title", "Tartiflette");
+  await page1.click("#add-form button[type=submit]");
+  await expect(page1.locator(".meal-title")).toHaveText("Tartiflette");
+  await page1.waitForTimeout(200);
+  expect(await notifications()).toEqual([]);
+
+  // Un ajout depuis l'autre appareil, si.
+  await page2.fill("#add-title", "Curry de légumes");
+  await page2.click("#add-form button[type=submit]");
+  await expect(page1.locator(".meal-title")).toHaveText(["Curry de légumes", "Tartiflette"], { timeout: 5000 });
+  await expect.poll(async () => (await notifications()).length).toBe(1);
+  expect((await notifications())[0].body).toContain("Curry de légumes");
+
+  // Un changement de statut depuis l'autre appareil aussi.
+  await page2.click('.meal-card:has-text("Tartiflette") [data-action="toggle"]');
+  await page2.click('.meal-card:has-text("Tartiflette") .status-pill[data-status="validee"]');
+  await expect.poll(async () => (await notifications()).length).toBe(2);
+  expect((await notifications())[1].body).toContain("Tartiflette");
+
+  await ctx1.close();
+  await ctx2.close();
+});
+
 test("un repas en cours de création n'est pas effacé par une mise à jour reçue en direct (régression)", async ({ browser }) => {
   // Verrouille le comportement suivant : le rendu déclenché par un message
   // WebSocket entrant ne doit jamais toucher le champ de saisie du
