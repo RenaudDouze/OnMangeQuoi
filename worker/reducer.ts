@@ -40,6 +40,43 @@ function findMeal(state: ListState, id: string): Meal | undefined {
   return state.meals.find((m) => m.id === id) ?? state.archive.find((m) => m.id === id);
 }
 
+/** Valide/normalise un Meal reçu tel quel de l'extérieur — un fichier JSON
+ * importé, un lien/QR figé décodé, ou un repas renvoyé par le client pour
+ * annuler sa propre suppression (voir "restoreDeletedMeal" ci-dessous) —
+ * jamais aussi digne de confiance qu'un champ construit un par un via les
+ * autres messages de ce fichier. */
+function sanitizeMeal(raw: Meal, order: number, now: number): Meal {
+  return {
+    id: typeof raw.id === "string" && MEAL_ID_RE.test(raw.id) ? raw.id : crypto.randomUUID(),
+    title: typeof raw.title === "string" ? raw.title.trim().slice(0, MAX_TITLE_LENGTH) : "",
+    // Stryker disable next-line ConditionalExpression: mutant équivalent —
+    // Array.prototype.includes ne peut de toute façon jamais matcher une
+    // valeur qui n'est pas dans le tableau (ici, jamais une chaîne hors de
+    // MEAL_STATUSES), donc ce garde-fou "typeof" ne change le résultat pour
+    // aucune entrée possible ; il documente juste l'intention.
+    status: typeof raw.status === "string" && (MEAL_STATUSES as string[]).includes(raw.status) ? raw.status : "idee",
+    // Stryker disable next-line ConditionalExpression: mutant équivalent,
+    // même raisonnement que pour "status" ci-dessus.
+    note: raw.note != null && (MEAL_NOTES as string[]).includes(raw.note) ? raw.note : null,
+    source: typeof raw.source === "string" ? raw.source.slice(0, MAX_SOURCE_LENGTH) : "",
+    comment: typeof raw.comment === "string" ? raw.comment.slice(0, MAX_COMMENT_LENGTH) : "",
+    order,
+    createdAt: typeof raw.createdAt === "number" ? raw.createdAt : now,
+    updatedAt: now,
+    doneAt: typeof raw.doneAt === "number" ? raw.doneAt : null,
+    // Les photos (ids R2) d'une liste ne signifient rien une fois copiées
+    // ailleurs (voir worker/index.ts) : gardées telles quelles seulement pour
+    // ne pas casser un import qui recharge la même liste (export puis
+    // réimport) ou une annulation de suppression, plafonnées comme à
+    // l'upload normal.
+    images: Array.isArray(raw.images) ? raw.images.filter((id): id is string => typeof id === "string").slice(0, MAX_IMAGES_PER_MEAL) : [],
+    // Stryker disable next-line ConditionalExpression: mutant équivalent,
+    // même raisonnement que pour "status" ci-dessus.
+    prepTime: raw.prepTime != null && (PREP_TIMES as string[]).includes(raw.prepTime) ? raw.prepTime : null,
+    plannedDate: typeof raw.plannedDate === "number" ? raw.plannedDate : null,
+  };
+}
+
 /** Migre en douceur une ListState chargée depuis le stockage d'une liste
  * créée avant l'ajout des photos multiples : à l'époque, un repas portait
  * `hasImage: boolean` + `imageVersion: number` (une seule photo, écrasée à
@@ -223,6 +260,23 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       return;
     }
 
+    case "restoreDeletedMeal": {
+      // Même plafond que "addMeal"/"importState" : sans authentification,
+      // rien n'empêche autrement un client d'annuler des suppressions en
+      // boucle pour faire grossir la liste indéfiniment.
+      if (state.meals.length + state.archive.length >= MAX_MEALS_TOTAL) return;
+      // Le repas a été supprimé juste avant (voir le commentaire sur
+      // "restoreDeletedMeal" dans shared/types.ts) : son id ne devrait exister
+      // nulle part. S'il existe déjà (ex: un autre appareil a annulé la même
+      // suppression en même temps), ne pas le dupliquer.
+      if (findMeal(state, msg.meal.id)) return;
+      const order = typeof msg.meal.order === "number" ? msg.meal.order : nextOrder(state.meals);
+      const meal = sanitizeMeal(msg.meal, order, now);
+      if (!meal.title) return;
+      state.meals.push(meal);
+      return;
+    }
+
     case "deleteArchivedMeal": {
       state.archive = state.archive.filter((m) => m.id !== msg.id);
       return;
@@ -254,53 +308,25 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       // "importState" forgé à la main, ce format étant atteignable
       // directement en websocket) n'est jamais passé par le formulaire
       // "Ajouter un repas" validé un par un : on lui applique donc ici les
-      // mêmes normalisations qu'ailleurs (id, statut, note, temps de
-      // préparation…) plutôt que de recopier les objets tels quels.
-      const sanitizeImportedMeal = (raw: Meal, order: number): Meal => ({
-        id: typeof raw.id === "string" && MEAL_ID_RE.test(raw.id) ? raw.id : crypto.randomUUID(),
-        title: typeof raw.title === "string" ? raw.title.trim().slice(0, MAX_TITLE_LENGTH) : "",
-        // Stryker disable next-line ConditionalExpression: mutant équivalent
-        // — Array.prototype.includes ne peut de toute façon jamais matcher
-        // une valeur qui n'est pas dans le tableau (ici, jamais une chaîne
-        // hors de MEAL_STATUSES), donc ce garde-fou "typeof" ne change le
-        // résultat pour aucune entrée possible ; il documente juste l'intention.
-        status: typeof raw.status === "string" && (MEAL_STATUSES as string[]).includes(raw.status) ? raw.status : "idee",
-        // Stryker disable next-line ConditionalExpression: mutant équivalent,
-        // même raisonnement que pour "status" ci-dessus.
-        note: raw.note != null && (MEAL_NOTES as string[]).includes(raw.note) ? raw.note : null,
-        source: typeof raw.source === "string" ? raw.source.slice(0, MAX_SOURCE_LENGTH) : "",
-        comment: typeof raw.comment === "string" ? raw.comment.slice(0, MAX_COMMENT_LENGTH) : "",
-        order,
-        createdAt: typeof raw.createdAt === "number" ? raw.createdAt : now,
-        updatedAt: now,
-        doneAt: typeof raw.doneAt === "number" ? raw.doneAt : null,
-        // Les photos (ids R2) d'une liste ne signifient rien une fois
-        // copiées ailleurs (voir worker/index.ts) : gardées telles quelles
-        // seulement pour ne pas casser un import qui recharge la même
-        // liste (export puis réimport), plafonnées comme à l'upload normal.
-        images: Array.isArray(raw.images) ? raw.images.filter((id): id is string => typeof id === "string").slice(0, MAX_IMAGES_PER_MEAL) : [],
-        // Stryker disable next-line ConditionalExpression: mutant équivalent,
-        // même raisonnement que pour "status" ci-dessus.
-        prepTime: raw.prepTime != null && (PREP_TIMES as string[]).includes(raw.prepTime) ? raw.prepTime : null,
-        plannedDate: typeof raw.plannedDate === "number" ? raw.plannedDate : null,
-      });
+      // mêmes normalisations que "restoreDeletedMeal" ci-dessus (voir
+      // sanitizeMeal) plutôt que de recopier les objets tels quels.
       // Stryker disable next-line MethodExpression: mutants équivalents — cette
       // clé n'est jamais lue seule, seulement comparée à une autre clé produite
       // par cette même fonction (voir existingKeys ci-dessous) ; que ce soit
       // .toLowerCase() ou .toUpperCase(), et que .trim() s'applique ou non
       // (tout titre arrivant ici a déjà été trim() par addMeal/updateMeal/
-      // sanitizeImportedMeal plus haut), la comparaison donne exactement le
-      // même résultat des deux côtés.
+      // sanitizeMeal plus haut), la comparaison donne exactement le même
+      // résultat des deux côtés.
       const mealKey = (title: string): string => title.trim().toLowerCase();
 
       if (msg.mode === "replace") {
         // Tronqué avant sanitisation, pas après : sans ça, un fichier
-        // démesuré ferait quand même tourner sanitizeImportedMeal (id
-        // aléatoire, slices…) sur des entrées jetées juste après.
+        // démesuré ferait quand même tourner sanitizeMeal (id aléatoire,
+        // slices…) sur des entrées jetées juste après.
         const rawMeals = msg.data.meals.slice(0, MAX_MEALS_TOTAL);
         const rawArchive = msg.data.archive.slice(0, Math.max(0, MAX_MEALS_TOTAL - rawMeals.length));
-        state.meals = rawMeals.map((meal, i) => sanitizeImportedMeal(meal, i)).filter((meal) => meal.title);
-        state.archive = rawArchive.map((meal, i) => sanitizeImportedMeal(meal, i)).filter((meal) => meal.title);
+        state.meals = rawMeals.map((meal, i) => sanitizeMeal(meal, i, now)).filter((meal) => meal.title);
+        state.archive = rawArchive.map((meal, i) => sanitizeMeal(meal, i, now)).filter((meal) => meal.title);
         if (msg.data.name) state.name = msg.data.name.trim().slice(0, MAX_LIST_NAME_LENGTH) || state.name;
       } else {
         // Dédoublonné par titre (comme les suggestions de l'historique côté
@@ -312,7 +338,7 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
         const existingKeys = new Set([...state.meals, ...state.archive].map((meal) => mealKey(meal.title)));
         const importOne = (raw: Meal, target: Meal[]): void => {
           if (state.meals.length + state.archive.length >= MAX_MEALS_TOTAL) return;
-          const sanitized = sanitizeImportedMeal(raw, nextOrder(target));
+          const sanitized = sanitizeMeal(raw, nextOrder(target), now);
           if (!sanitized.title || existingKeys.has(mealKey(sanitized.title))) return;
           target.push(sanitized);
         };

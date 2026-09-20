@@ -1457,13 +1457,15 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       }
     });
 
-    const deleteBtn = card.querySelector<HTMLButtonElement>('[data-action="delete"]');
-    if (deleteBtn) {
-      wireConfirmClick(deleteBtn, {
-        armedLabel: "Confirmer la suppression ?",
-        onConfirm: () => conn.send({ type: "deleteMeal", id }),
-      });
-    }
+    // Contrairement à "delete-forever" ci-dessous (suppression définitive
+    // d'un repas déjà dans l'historique), la suppression d'un repas actif est
+    // annulable : pas de double-clic de confirmation, l'action part
+    // immédiatement et le toast "Annuler" (voir showUndoToast) sert de filet
+    // de sécurité — même logique que pour "Repas déplacé vers l'historique".
+    card.querySelector<HTMLButtonElement>('[data-action="delete"]')?.addEventListener("click", () => {
+      conn.send({ type: "deleteMeal", id });
+      showUndoToast("Repas supprimé.", () => conn.send({ type: "restoreDeletedMeal", meal }));
+    });
 
     const deleteForeverBtn = card.querySelector<HTMLButtonElement>('[data-action="delete-forever"]');
     if (deleteForeverBtn) {
@@ -1603,7 +1605,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       el.appendChild(btn);
     }
     document.body.appendChild(el);
-    toastTimer = setTimeout(() => el.remove(), 6000);
+    toastTimer = setTimeout(() => el.remove(), 5000);
   }
 
   return () => {
