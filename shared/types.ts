@@ -109,6 +109,13 @@ export type ClientMessage =
   | { type: "addMealImage"; id: string; imageId: string }
   | { type: "removeMealImage"; id: string; imageId: string }
   | { type: "deleteMeal"; id: string }
+  // Annule une suppression ("Annuler" du toast affiché juste après un
+  // "deleteMeal") : contrairement à "restoreMeal" (qui déplace un repas
+  // encore présent dans `archive`), le repas supprimé n'existe déjà plus
+  // nulle part côté serveur — le client renvoie donc l'intégralité du repas
+  // tel qu'il l'avait juste avant de le supprimer, revalidée comme
+  // n'importe quelle donnée externe (voir "importState" dans reducer.ts).
+  | { type: "restoreDeletedMeal"; meal: Meal }
   | { type: "reorderMeals"; orderedIds: string[] }
   | { type: "restoreMeal"; id: string }
   | { type: "deleteArchivedMeal"; id: string }

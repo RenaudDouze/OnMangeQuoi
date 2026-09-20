@@ -47,7 +47,7 @@ test("le mode accessibilité s'active, persiste après un rechargement, et se d�
   await expect(page.locator("#a11y-toggle")).toHaveAttribute("aria-pressed", "false");
 });
 
-test("supprimer un repas demande un second clic au même endroit", async ({ page }) => {
+test("supprimer un repas part immédiatement mais propose 5s pour annuler", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
   await page.waitForURL(/\/l\//);
@@ -61,15 +61,33 @@ test("supprimer un repas demande un second clic au même endroit", async ({ page
   // rare) : il faut déplier pour y accéder.
   await page.click('[data-action="toggle"]');
 
-  // Premier clic : arme le bouton, ne supprime rien encore.
-  await page.click('[data-action="delete"]');
-  await expect(page.locator('[data-action="delete"]')).toHaveClass(/confirm-armed/);
-  await expect(page.locator(".meal-card")).toHaveCount(1);
-
-  // Second clic au même endroit : confirme la suppression.
+  // Contrairement à "delete-forever" (voir plus bas), un seul clic suffit :
+  // pas de double confirmation, le toast "Annuler" sert de filet de sécurité.
   await page.click('[data-action="delete"]');
   await expect(page.locator(".meal-card")).toHaveCount(0);
   await expect(page.locator(".empty-message")).toBeVisible();
+  await expect(page.locator("#list-toast")).toContainText("Repas supprimé.");
+
+  await page.click("#list-toast button");
+  await expect(page.locator(".meal-title")).toHaveText("Pommes au four");
+  await expect(page.locator("#list-toast")).toHaveCount(0);
+});
+
+test("le toast d'annulation d'un repas supprimé disparaît après 5s", async ({ page }) => {
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.fill("#add-title", "Pommes au four");
+  await page.click("#add-form button[type=submit]");
+  await page.click('[data-action="toggle"]');
+  await page.click('[data-action="delete"]');
+  await expect(page.locator("#list-toast")).toBeVisible();
+
+  await page.waitForTimeout(5200);
+  await expect(page.locator("#list-toast")).toHaveCount(0);
+  await expect(page.locator(".meal-card")).toHaveCount(0);
 });
 
 test("un nouveau repas apparaît en tête de la liste active", async ({ page }) => {

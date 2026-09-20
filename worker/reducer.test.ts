@@ -565,6 +565,81 @@ describe("applyMessage: deleteMeal", () => {
   });
 });
 
+describe("applyMessage: restoreDeletedMeal", () => {
+  it("restaure un repas supprimé avec toutes ses données, à sa place d'origine", () => {
+    const state = makeState({ meals: [makeMeal({ id: "m2", title: "Autre", order: 0 })] });
+    const deleted = makeMeal({
+      id: "m1",
+      title: "Tartiflette",
+      status: "validee",
+      note: "quand_tu_veux",
+      source: "https://exemple.fr",
+      comment: "Un commentaire",
+      order: -1,
+      images: ["img1"],
+      prepTime: "rapide",
+      plannedDate: 333,
+    });
+    applyMessage(state, { type: "restoreDeletedMeal", meal: deleted }, NOW + 5);
+    const meal = state.meals.find((m) => m.id === "m1");
+    if (!meal) throw new Error("Repas restauré introuvable");
+    expect(meal.title).toBe("Tartiflette");
+    expect(meal.status).toBe("validee");
+    expect(meal.note).toBe("quand_tu_veux");
+    expect(meal.source).toBe("https://exemple.fr");
+    expect(meal.comment).toBe("Un commentaire");
+    expect(meal.images).toEqual(["img1"]);
+    expect(meal.prepTime).toBe("rapide");
+    expect(meal.plannedDate).toBe(333);
+    expect(meal.order).toBe(-1);
+    expect(meal.updatedAt).toBe(NOW + 5);
+  });
+
+  it("retombe sur nextOrder si l'ordre fourni n'est pas un nombre", () => {
+    const state = makeState({ meals: [makeMeal({ id: "m2", order: 3 })] });
+    const raw = { ...makeMeal({ id: "m1" }), order: "pas un nombre" } as unknown as Meal;
+    applyMessage(state, { type: "restoreDeletedMeal", meal: raw }, NOW);
+    expect(state.meals.find((m) => m.id === "m1")?.order).toBe(4);
+  });
+
+  it("ignore si un repas actif avec le même id existe déjà", () => {
+    const state = makeState({ meals: [makeMeal({ id: "m1", title: "Déjà là" })] });
+    applyMessage(state, { type: "restoreDeletedMeal", meal: makeMeal({ id: "m1", title: "Restauré" }) }, NOW);
+    expect(state.meals).toHaveLength(1);
+    expect(state.meals[0].title).toBe("Déjà là");
+  });
+
+  it("ignore aussi si le même id existe dans l'archive", () => {
+    const state = makeState({ archive: [makeMeal({ id: "m1", status: "fait", doneAt: NOW })] });
+    applyMessage(state, { type: "restoreDeletedMeal", meal: makeMeal({ id: "m1", title: "Restauré" }) }, NOW);
+    expect(state.meals).toEqual([]);
+    expect(state.archive).toHaveLength(1);
+  });
+
+  it("ignore si le titre est vide une fois nettoyé", () => {
+    const state = makeState();
+    applyMessage(state, { type: "restoreDeletedMeal", meal: makeMeal({ title: "   " }) }, NOW);
+    expect(state.meals).toEqual([]);
+  });
+
+  it("ignore si la liste a déjà atteint MAX_MEALS_TOTAL", () => {
+    const meals = Array.from({ length: MAX_MEALS_TOTAL }, (_, i) => makeMeal({ id: `m${i}`, order: i }));
+    const state = makeState({ meals });
+    applyMessage(state, { type: "restoreDeletedMeal", meal: makeMeal({ id: "new" }) }, NOW);
+    expect(state.meals).toHaveLength(MAX_MEALS_TOTAL);
+    expect(state.meals.some((m) => m.id === "new")).toBe(false);
+  });
+
+  it("compte les repas actifs et archivés ensemble pour le plafond MAX_MEALS_TOTAL", () => {
+    const half = MAX_MEALS_TOTAL / 2;
+    const meals = Array.from({ length: half }, (_, i) => makeMeal({ id: `m${i}`, order: i }));
+    const archive = Array.from({ length: half }, (_, i) => makeMeal({ id: `a${i}`, status: "fait", doneAt: NOW }));
+    const state = makeState({ meals, archive });
+    applyMessage(state, { type: "restoreDeletedMeal", meal: makeMeal({ id: "new" }) }, NOW);
+    expect(state.meals.some((m) => m.id === "new")).toBe(false);
+  });
+});
+
 describe("applyMessage: deleteArchivedMeal", () => {
   it("supprime définitivement un repas archivé, sans le faire réapparaître en liste active", () => {
     const state = makeState();
