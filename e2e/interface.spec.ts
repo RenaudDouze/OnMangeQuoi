@@ -736,6 +736,7 @@ test("le menu d'actions regroupe trier, filtrer, tout déplier et partager, et s
   await expect(page.locator("#sort-toggle-btn")).toBeVisible();
   await expect(page.locator("#filter-toggle-btn")).toBeVisible();
   await expect(page.locator("#toggle-all-btn")).toHaveCount(1);
+  await expect(page.locator("#notif-toggle-btn")).toBeVisible();
   await expect(page.locator("#btn-share")).toBeVisible();
 
   // Sélectionner "Filtrer" ouvre le panneau de filtres et referme le menu
@@ -758,6 +759,30 @@ test("le menu d'actions regroupe trier, filtrer, tout déplier et partager, et s
   await page.click("#menu-toggle-btn");
   await expect(page.locator("#filter-toggle-btn")).toBeVisible();
   await expect(page.locator("#filter-panel")).toBeHidden();
+});
+
+test("le bouton Notifications propose de réactiver l'autorisation dans le navigateur quand elle a été refusée", async ({ page }) => {
+  // Simule un navigateur où la permission a déjà été explicitement refusée
+  // (Notification.requestPermission n'est alors même plus proposé par la
+  // plupart des navigateurs, voir wireNotificationToggle) — pas besoin de
+  // deux appareils ici, contrairement au test de bout en bout du dossier
+  // sync.spec.ts, qui couvre le scénario "autorisé" avec les effets réels.
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "Notification", {
+      configurable: true,
+      value: { permission: "denied", requestPermission: () => Promise.resolve("denied") },
+    });
+  });
+  await page.goto("/");
+  await page.click("#create-form button[type=submit]");
+  await page.waitForURL(/\/l\//);
+  await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
+
+  await page.click("#menu-toggle-btn");
+  await expect(page.locator("#notif-toggle-btn")).toHaveText("Activer les notifications");
+  await page.click("#notif-toggle-btn");
+  await expect(page.locator("#list-toast")).toContainText("Notifications bloquées");
+  await expect(page.locator("#notif-toggle-btn")).toHaveAttribute("aria-pressed", "false");
 });
 
 test("les filtres de la liste active se combinent (statut + temps de préparation) et se réinitialisent", async ({ page }) => {
