@@ -1097,6 +1097,17 @@ button:focus-visible,
   word-break: break-word;
 }
 
+.meal-planned-date-row {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.meal-planned-date {
+  flex: 1;
+  min-width: 0;
+}
+
 .meal-source:hover {
   background: var(--checked-bg);
 }
