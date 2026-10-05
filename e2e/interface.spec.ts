@@ -915,4 +915,22 @@ test("planifier un repas sur aujourd'hui l'affiche dans l'onglet Planning, et «
   await expect(page.locator(".planning-day.today .planning-entry-empty")).toBeVisible();
   await page.click('.tab-btn[data-tab="active"]');
   await expect(page.locator('[data-action="planned-date"]')).toHaveValue("");
+
+  // Le bouton "Retirer le jour prévu" sur la carte elle-même (régression :
+  // sans lui, seul le petit "x" natif du sélecteur de date — minuscule,
+  // voire absent sur mobile — permettait de vider le champ) n'apparaît que
+  // lorsqu'une date est effectivement choisie.
+  await expect(page.locator('[data-action="clear-planned-date"]')).toHaveCount(0);
+  await page.evaluate(() => {
+    const input = document.querySelector('[data-action="planned-date"]') as HTMLInputElement;
+    const d = new Date();
+    input.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await expect(page.locator('[data-action="clear-planned-date"]')).toBeVisible();
+  await page.click('[data-action="clear-planned-date"]');
+  await expect(page.locator('[data-action="planned-date"]')).toHaveValue("");
+  await expect(page.locator('[data-action="clear-planned-date"]')).toHaveCount(0);
+  await page.click('.tab-btn[data-tab="planning"]');
+  await expect(page.locator(".planning-day.today .planning-entry-empty")).toBeVisible();
 });

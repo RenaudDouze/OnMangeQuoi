@@ -505,7 +505,14 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
             ? ""
             : `<div class="meal-field">
                 <label class="meal-field-label" for="meal-planned-${escapeHtml(meal.id)}">Jour prévu</label>
-                <input type="date" id="meal-planned-${escapeHtml(meal.id)}" class="meal-planned-date" data-action="planned-date" value="${meal.plannedDate ? toDateInputValue(meal.plannedDate) : ""}" />
+                <div class="meal-planned-date-row">
+                  <input type="date" id="meal-planned-${escapeHtml(meal.id)}" class="meal-planned-date" data-action="planned-date" value="${meal.plannedDate ? toDateInputValue(meal.plannedDate) : ""}" />
+                  ${
+                    meal.plannedDate
+                      ? `<button type="button" class="icon-btn" data-action="clear-planned-date" aria-label="Retirer le jour prévu">${icons.close}</button>`
+                      : ""
+                  }
+                </div>
               </div>`
         }
         <div class="meal-field">
@@ -1546,6 +1553,15 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       const value = (e.target as HTMLInputElement).value;
       const plannedDate = value ? fromDateInputValue(value) : null;
       conn.send({ type: "setMealPlannedDate", id, plannedDate });
+    });
+
+    // Second moyen de vider le champ, en plus du petit "x" natif du
+    // sélecteur de date (`[data-action="planned-date"]` ci-dessus) : ce
+    // dernier est minuscule, voire absent sur mobile selon le navigateur
+    // (app mobile-first, voir CLAUDE.md) — sans ce bouton, impossible d'y
+    // retirer une date une fois choisie.
+    card.querySelector<HTMLButtonElement>('[data-action="clear-planned-date"]')?.addEventListener("click", () => {
+      conn.send({ type: "setMealPlannedDate", id, plannedDate: null });
     });
 
     card.querySelectorAll<HTMLButtonElement>(".status-pill").forEach((btn) => {
