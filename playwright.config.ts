@@ -16,6 +16,19 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:5173",
     trace: "on-first-retry",
+    // Les limiteurs de débit du Worker (wrangler.json → ratelimits) sont
+    // indexés par CF-Connecting-IP et restent actifs sous `vite dev`, où
+    // toutes les requêtes partagent la même IP locale : la suite crée plus
+    // de 30 listes, au-delà de CREATE_LIST_RATE_LIMITER (30/min), et les
+    // dernières créations recevaient une 429 selon la vitesse du runner.
+    // En local, l'en-tête envoyé par le navigateur est transmis tel quel au
+    // Worker (en production, Cloudflare l'écrase toujours) : ce fichier est
+    // réévalué dans chaque processus worker de Playwright, donc chacun reçoit
+    // sa propre IP fictive et son propre quota, sans toucher au code ni à la
+    // limite réelle.
+    extraHTTPHeaders: {
+      "CF-Connecting-IP": `10.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 254) + 1}`,
+    },
   },
   webServer: {
     // --host 127.0.0.1 is load-bearing, not cosmetic: without it Vite binds
