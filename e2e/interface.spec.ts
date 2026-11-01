@@ -935,7 +935,7 @@ test("planifier un repas sur aujourd'hui l'affiche dans l'onglet Planning, et «
   await expect(page.locator(".planning-day.today .planning-entry-empty")).toBeVisible();
 });
 
-test("un repas se bascule « pour la semaine » / « pour plus tard » d'un tap, et la liste se filtre dessus", async ({ page }) => {
+test("la liste active est séparée en « pour la semaine » / « pour plus tard », un repas passe de l'une à l'autre d'un tap", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
   await page.waitForURL(/\/l\//);
@@ -947,36 +947,49 @@ test("un repas se bascule « pour la semaine » / « pour plus tard » d'un tap,
     await expect(page.locator(`.meal-card:has-text("${title}")`)).toBeVisible();
   }
 
-  // Par défaut, tout repas est « pour plus tard » — et la bascule, sur la
-  // ligne repliée, ne déplie pas la carte.
-  const tartifletteToggle = page.locator('.meal-card:has-text("Tartiflette") [data-action="toggle-this-week"]');
-  await expect(tartifletteToggle).toHaveAttribute("data-this-week", "false");
-  await expect(tartifletteToggle).toContainText("Plus tard");
-  await tartifletteToggle.click();
-  await expect(tartifletteToggle).toHaveAttribute("data-this-week", "true");
-  await expect(tartifletteToggle).toContainText("Semaine");
+  const weekHeader = page.locator('.meal-section-header[data-section="week"]');
+  const laterHeader = page.locator('.meal-section-header[data-section="later"]');
+  // Liste des titres dans l'ordre affiché, avec les en-têtes de section.
+  const order = () =>
+    page.locator("#meal-list > li").evaluateAll((els) =>
+      els.map((el) => (el as HTMLElement).dataset.section ?? el.querySelector(".meal-title")?.textContent),
+    );
+
+  // Par défaut, tout repas est « pour la semaine ».
+  await expect(weekHeader.locator(".meal-section-count")).toHaveText("2");
+  await expect(laterHeader.locator(".meal-section-count")).toHaveText("0");
+  await expect.poll(order).toEqual(["week", "Curry", "Tartiflette", "later"]);
+
+  // Le bouton de la ligne repliée repousse le repas à plus tard, sans déplier la carte.
+  await page.click('.meal-card:has-text("Tartiflette") [data-action="toggle-later"]');
+  await expect.poll(order).toEqual(["week", "Curry", "later", "Tartiflette"]);
   await expect(page.locator('.meal-card:has-text("Tartiflette")')).not.toHaveClass(/expanded/);
+  await expect(page.locator('.meal-card:has-text("Tartiflette") [data-action="toggle-later"]')).toContainText("Semaine");
 
   // Persisté côté serveur, pas seulement à l'écran.
   await page.reload();
   await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
-  await expect(tartifletteToggle).toHaveAttribute("data-this-week", "true");
+  await expect.poll(order).toEqual(["week", "Curry", "later", "Tartiflette"]);
 
-  await page.click("#menu-toggle-btn");
-  await page.click("#filter-toggle-btn");
-  await page.click('.filter-week-pill[data-week="semaine"]');
-  await expect(page.locator(".meal-card")).toHaveCount(1);
-  await expect(page.locator(".meal-title")).toHaveText("Tartiflette");
+  // Glisser Curry sous l'en-tête « pour plus tard » le change de section.
+  const handleBox = (await page.locator('.meal-card:has-text("Curry") .drag-handle').boundingBox())!;
+  const targetBox = (await page.locator('.meal-card:has-text("Tartiflette")').boundingBox())!;
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height + 5, { steps: 10 });
+  await page.mouse.up();
+  await expect.poll(order).toEqual(["week", "later", "Tartiflette", "Curry"]);
+  await expect(laterHeader.locator(".meal-section-count")).toHaveText("2");
+  await page.click('.meal-card:has-text("Curry") [data-action="toggle-later"]');
+  await expect.poll(order).toEqual(["week", "Curry", "later", "Tartiflette"]);
 
-  await page.click('.filter-week-pill[data-week="semaine"]');
-  await page.click('.filter-week-pill[data-week="plus_tard"]');
-  await expect(page.locator(".meal-card")).toHaveCount(1);
-  await expect(page.locator(".meal-title")).toHaveText("Curry");
-
-  // Rebasculer Tartiflette « pour plus tard » la fait apparaître dans ce filtre.
-  await page.click("#filter-reset-btn");
-  await tartifletteToggle.click();
-  await expect(tartifletteToggle).toHaveAttribute("data-this-week", "false");
-  await page.click('.filter-week-pill[data-week="plus_tard"]');
-  await expect(page.locator(".meal-card")).toHaveCount(2);
+  // Archivé puis remis depuis l'historique : il revient « pour la semaine ».
+  await page.click('.meal-card:has-text("Tartiflette") [data-action="toggle"]');
+  await page.click('.meal-card:has-text("Tartiflette") .status-pill[data-status="fait"]');
+  await page.click("#mark-done-confirm");
+  await page.click('.tab-btn[data-tab="archive"]');
+  await page.click('.meal-card:has-text("Tartiflette") [data-action="restore"]');
+  await page.click('.tab-btn[data-tab="active"]');
+  await expect(weekHeader.locator(".meal-section-count")).toHaveText("2");
+  await expect(laterHeader.locator(".meal-section-count")).toHaveText("0");
 });

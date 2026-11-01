@@ -74,7 +74,7 @@ function sanitizeMeal(raw: Meal, order: number, now: number): Meal {
     // même raisonnement que pour "status" ci-dessus.
     prepTime: raw.prepTime != null && (PREP_TIMES as string[]).includes(raw.prepTime) ? raw.prepTime : null,
     plannedDate: typeof raw.plannedDate === "number" ? raw.plannedDate : null,
-    thisWeek: raw.thisWeek === true,
+    later: raw.later === true,
   };
 }
 
@@ -154,7 +154,7 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
         images: [],
         prepTime: null,
         plannedDate: null,
-        thisWeek: false,
+        later: false,
       };
       state.meals.push(meal);
       return;
@@ -225,13 +225,13 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       return;
     }
 
-    case "setMealThisWeek": {
+    case "setMealLater": {
       // Voir le commentaire dans "setMealStatus" : rien ne garantit à
       // l'exécution qu'un message reçu par websocket porte bien un booléen.
-      if (typeof msg.thisWeek !== "boolean") return;
+      if (typeof msg.later !== "boolean") return;
       const meal = findMeal(state, msg.id);
       if (!meal) return;
-      meal.thisWeek = msg.thisWeek;
+      meal.later = msg.later;
       meal.updatedAt = now;
       return;
     }
@@ -301,10 +301,9 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       const [meal] = state.archive.splice(idx, 1);
       meal.status = "idee";
       meal.doneAt = null;
-      // Un repas remis en liste depuis l'historique repart « pour plus
-      // tard » : le marqueur « pour la semaine » qu'il portait date de la
-      // semaine où il a été fait, plus de celle-ci.
-      meal.thisWeek = false;
+      // Un repas remis en liste depuis l'historique revient « pour la
+      // semaine » : on le ressort pour le refaire, pas pour le ranger.
+      meal.later = false;
       meal.updatedAt = now;
       meal.order = nextOrder(state.meals);
       state.meals.push(meal);

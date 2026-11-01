@@ -83,13 +83,15 @@ export interface Meal {
    * si non planifié. Uniquement pertinent en liste active — voir l'onglet
    * Planning. */
   plannedDate: number | null;
-  /** Planification grossière, sans jour précis : `true` = « pour la
-   * semaine », `false` = « pour plus tard » (par défaut). Indépendant de
-   * plannedDate (jour précis, voir l'onglet Planning). Absent (undefined)
-   * sur un repas stocké avant l'ajout de ce champ : à traiter comme
-   * `false` côté client (voir `meal.thisWeek === true` dans
-   * src/views/list.ts) plutôt que via une migration de stockage. */
-  thisWeek: boolean;
+  /** Planification grossière, sans jour précis : `false` = « pour la
+   * semaine » (par défaut), `true` = « pour plus tard ». Indépendant de
+   * plannedDate (jour précis, voir l'onglet Planning). Exprimé dans ce sens
+   * (plutôt qu'un `thisWeek`) pour que la valeur par défaut soit aussi
+   * celle d'un champ absent : un repas stocké avant l'ajout de ce champ
+   * (undefined) se lit naturellement « pour la semaine » côté client (voir
+   * `meal.later === true` dans src/views/list.ts), sans migration de
+   * stockage. */
+  later: boolean;
 }
 
 export interface ListState {
@@ -113,7 +115,7 @@ export type ClientMessage =
   | { type: "setMealNote"; id: string; note: MealNote | null }
   | { type: "setMealPrepTime"; id: string; prepTime: PrepTime | null }
   | { type: "setMealPlannedDate"; id: string; plannedDate: number | null }
-  | { type: "setMealThisWeek"; id: string; thisWeek: boolean }
+  | { type: "setMealLater"; id: string; later: boolean }
   | { type: "addMealImage"; id: string; imageId: string }
   | { type: "removeMealImage"; id: string; imageId: string }
   | { type: "deleteMeal"; id: string }

@@ -114,39 +114,31 @@ function filterPrepTimePickerHtml(active: Set<PrepTime>): string {
   return `<div class="preptime-picker" role="group" aria-label="Filtrer par temps de préparation">${pills}</div>`;
 }
 
-/** Planification grossière d'un repas actif (voir Meal.thisWeek) : deux
- * valeurs seulement, d'où des clés locales au client plutôt qu'une enum
- * partagée — le serveur ne connaît qu'un booléen. */
-type WeekFilter = "semaine" | "plus_tard";
-
-const WEEK_FILTERS: WeekFilter[] = ["semaine", "plus_tard"];
-
-const WEEK_LABELS: Record<WeekFilter, string> = {
-  semaine: "📅 Pour la semaine",
-  plus_tard: "⏳ Pour plus tard",
-};
-
-/** Absent sur un repas stocké avant l'ajout du champ : vaut « plus tard ». */
-function isThisWeek(meal: Meal): boolean {
-  return meal.thisWeek === true;
+/** Planification grossière d'un repas actif (voir Meal.later). Absent sur
+ * un repas stocké avant l'ajout du champ : vaut « pour la semaine ». */
+function isLater(meal: Meal): boolean {
+  return meal.later === true;
 }
 
-/** Bascule « pour la semaine » / « pour plus tard » sur la ligne repliée
- * d'un repas actif : c'est le geste le plus fréquent quand on prépare sa
- * semaine, il doit rester à un tap sans avoir à déplier la carte. Le libellé
- * visible change avec l'état (plutôt qu'un simple aria-pressed sur un
- * libellé fixe) car les deux valeurs ont chacune un sens propre. */
+/** En-tête d'une des deux sections de la liste active (voir renderMeals) :
+ * un <li> non glissable (SortableJS ne déplace que .meal-card, voir
+ * wireMealList) mais qui sert de repère pour savoir dans quelle section une
+ * carte a été déposée. */
+function sectionHeaderHtml(later: boolean, count: number): string {
+  const label = later ? "⏳ Pour plus tard" : "📅 Pour la semaine";
+  return `<li class="meal-section-header" data-section="${later ? "later" : "week"}"><h2>${label}</h2><span class="meal-section-count">${count}</span></li>`;
+}
+
+/** Déplace un repas actif d'une section à l'autre, d'un tap depuis la ligne
+ * repliée (en plus du glissé d'une section à l'autre, voir wireMealList) :
+ * c'est le geste le plus fréquent quand on prépare sa semaine. Libellé
+ * d'action (où le repas va) plutôt que d'état : la section où il se trouve
+ * dit déjà où il en est. La flèche suit l'ordre des sections à l'écran
+ * (« semaine » au-dessus, « plus tard » en dessous). */
 function weekToggleHtml(meal: Meal): string {
-  const week = isThisWeek(meal);
-  const label = week ? "Pour la semaine — passer à pour plus tard" : "Pour plus tard — passer à pour la semaine";
-  return `<button type="button" class="week-toggle" data-action="toggle-this-week" data-this-week="${week}" aria-label="${label}" title="${label}">${week ? "📅 Semaine" : "⏳ Plus tard"}</button>`;
-}
-
-function filterWeekPickerHtml(active: Set<WeekFilter>): string {
-  const pills = WEEK_FILTERS.map(
-    (w) => `<button type="button" class="filter-week-pill" data-week="${w}" aria-pressed="${active.has(w)}">${WEEK_LABELS[w]}</button>`,
-  ).join("");
-  return `<div class="preptime-picker" role="group" aria-label="Filtrer par planification">${pills}</div>`;
+  const later = isLater(meal);
+  const label = later ? "Passer pour la semaine" : "Repousser à plus tard";
+  return `<button type="button" class="week-toggle" data-action="toggle-later" data-later="${later}" aria-label="${label}" title="${label}">${later ? "↑ Semaine" : "↓ Plus tard"}</button>`;
 }
 
 function historyStatsHtml(archive: Meal[]): string {
@@ -661,10 +653,6 @@ function layoutHtml(state: ListState, connected: boolean): string {
           <div id="filter-status-pills"></div>
         </div>
         <div class="filter-group">
-          <span class="meal-field-label">Planification</span>
-          <div id="filter-week-pills"></div>
-        </div>
-        <div class="filter-group">
           <span class="meal-field-label">Temps de préparation</span>
           <div id="filter-preptime-pills"></div>
         </div>
@@ -705,7 +693,6 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   // d'une visite à l'autre.
   const activeStatusFilters = new Set<MealStatus>();
   const activePrepTimeFilters = new Set<PrepTime>();
-  const activeWeekFilters = new Set<WeekFilter>();
   // Semaine affichée dans l'onglet Planning (voir renderPlanning) : le lundi
   // de la semaine courante par défaut.
   let weekStart = startOfWeek(Date.now());
@@ -1030,7 +1017,6 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     root.querySelector("#filter-reset-btn")?.addEventListener("click", () => {
       activeStatusFilters.clear();
       activePrepTimeFilters.clear();
-      activeWeekFilters.clear();
       renderFilterPickers();
       renderMeals();
     });
@@ -1065,21 +1051,8 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         });
       });
     }
-    const weekEl = root.querySelector("#filter-week-pills") as HTMLElement | null;
-    if (weekEl) {
-      weekEl.innerHTML = filterWeekPickerHtml(activeWeekFilters);
-      weekEl.querySelectorAll<HTMLButtonElement>(".filter-week-pill").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const week = btn.dataset.week as WeekFilter;
-          if (activeWeekFilters.has(week)) activeWeekFilters.delete(week);
-          else activeWeekFilters.add(week);
-          renderFilterPickers();
-          renderMeals();
-        });
-      });
-    }
     const resetBtn = root.querySelector("#filter-reset-btn") as HTMLButtonElement | null;
-    if (resetBtn) resetBtn.hidden = activeStatusFilters.size === 0 && activePrepTimeFilters.size === 0 && activeWeekFilters.size === 0;
+    if (resetBtn) resetBtn.hidden = activeStatusFilters.size === 0 && activePrepTimeFilters.size === 0;
   }
 
   function wireToolbar(): void {
@@ -1242,8 +1215,18 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       onStart: () => {
         dragging = true;
       },
-      onEnd: () => {
+      onEnd: (evt) => {
         dragging = false;
+        // Une carte glissée sous l'en-tête « pour plus tard » (ou remontée
+        // au-dessus) change de section : voir sectionHeaderHtml. Envoyé avant
+        // le réordonnancement, que le rendu suivant applique de toute façon
+        // dans la bonne section.
+        const item = evt.item as HTMLLIElement;
+        const droppedLater = Array.from(listEl.children)
+          .slice(0, Array.from(listEl.children).indexOf(item))
+          .some((el) => (el as HTMLElement).dataset.section === "later");
+        const meal = state?.meals.find((m) => m.id === item.dataset.id);
+        if (meal && isLater(meal) !== droppedLater) conn.send({ type: "setMealLater", id: meal.id, later: droppedLater });
         const orderedIds = Array.from(listEl.querySelectorAll<HTMLLIElement>(".meal-card")).map((li) => li.dataset.id!);
         conn.send({ type: "reorderMeals", orderedIds });
       },
@@ -1404,10 +1387,13 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     let meals = state.meals;
     if (activeStatusFilters.size > 0) meals = meals.filter((m) => activeStatusFilters.has(m.status));
     if (activePrepTimeFilters.size > 0) meals = meals.filter((m) => m.prepTime !== null && activePrepTimeFilters.has(m.prepTime));
-    if (activeWeekFilters.size > 0) meals = meals.filter((m) => activeWeekFilters.has(isThisWeek(m) ? "semaine" : "plus_tard"));
-    return sortByStatus
+    const sorted = sortByStatus
       ? [...meals].sort((a, b) => MEAL_STATUSES.indexOf(a.status) - MEAL_STATUSES.indexOf(b.status) || a.order - b.order)
       : [...meals].sort((a, b) => a.order - b.order);
+    // Deux sections, dans l'ordre affiché (voir renderMeals) : « pour la
+    // semaine » d'abord, « pour plus tard » ensuite, chacune gardant l'ordre
+    // ci-dessus.
+    return [...sorted.filter((m) => !isLater(m)), ...sorted.filter((m) => isLater(m))];
   }
 
   function renderMeals(): void {
@@ -1522,7 +1508,21 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       wireMealCard(card, meal);
       return card;
     });
-    listEl.replaceChildren(...cards);
+    if (tab !== "active") {
+      listEl.replaceChildren(...cards);
+      return;
+    }
+    // Liste active : séparée en deux sections (voir visibleMeals, qui les
+    // renvoie déjà dans cet ordre). Les deux en-têtes restent affichés même
+    // quand une section est vide, pour pouvoir y déposer une carte au glissé.
+    const laterCount = meals.filter((m) => isLater(m)).length;
+    const weekCount = meals.length - laterCount;
+    listEl.replaceChildren(
+      elementFromHtml(sectionHeaderHtml(false, weekCount)),
+      ...cards.slice(0, weekCount),
+      elementFromHtml(sectionHeaderHtml(true, laterCount)),
+      ...cards.slice(weekCount),
+    );
   }
 
   function elementFromHtml(html: string): HTMLLIElement {
@@ -1595,8 +1595,8 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       copyToClipboard(meal.title, "Titre copié.");
     });
 
-    card.querySelector<HTMLButtonElement>('[data-action="toggle-this-week"]')?.addEventListener("click", () => {
-      conn.send({ type: "setMealThisWeek", id, thisWeek: !isThisWeek(meal) });
+    card.querySelector<HTMLButtonElement>('[data-action="toggle-later"]')?.addEventListener("click", () => {
+      conn.send({ type: "setMealLater", id, later: !isLater(meal) });
     });
 
     card.querySelectorAll<HTMLButtonElement>(".preptime-pill").forEach((btn) => {
