@@ -935,7 +935,7 @@ test("planifier un repas sur aujourd'hui l'affiche dans l'onglet Planning, et «
   await expect(page.locator(".planning-day.today .planning-entry-empty")).toBeVisible();
 });
 
-test("la liste active est séparée en « pour la semaine » / « pour plus tard », un repas passe de l'une à l'autre d'un tap", async ({ page }) => {
+test("la liste active est séparée en « pour la semaine » / « pour plus tard », un repas change de section depuis son volet ou au glissé", async ({ page }) => {
   await page.goto("/");
   await page.click("#create-form button[type=submit]");
   await page.waitForURL(/\/l\//);
@@ -960,11 +960,14 @@ test("la liste active est séparée en « pour la semaine » / « pour plus tard
   await expect(laterHeader.locator(".meal-section-count")).toHaveText("0");
   await expect.poll(order).toEqual(["week", "Curry", "Tartiflette", "later"]);
 
-  // Le bouton de la ligne repliée repousse le repas à plus tard, sans déplier la carte.
-  await page.click('.meal-card:has-text("Tartiflette") [data-action="toggle-later"]');
+  // Le choix se fait dans le volet déplié, pas sur la ligne repliée.
+  await expect(page.locator('.meal-card:has-text("Tartiflette") .later-pill')).toHaveCount(0);
+  await page.click('.meal-card:has-text("Tartiflette") [data-action="toggle"]');
+  await expect(page.locator('.meal-card:has-text("Tartiflette") .later-pill[data-later="false"]')).toHaveAttribute("aria-pressed", "true");
+  await page.click('.meal-card:has-text("Tartiflette") .later-pill[data-later="true"]');
   await expect.poll(order).toEqual(["week", "Curry", "later", "Tartiflette"]);
-  await expect(page.locator('.meal-card:has-text("Tartiflette")')).not.toHaveClass(/expanded/);
-  await expect(page.locator('.meal-card:has-text("Tartiflette") [data-action="toggle-later"]')).toContainText("Semaine");
+  await expect(page.locator('.meal-card:has-text("Tartiflette") .later-pill[data-later="true"]')).toHaveAttribute("aria-pressed", "true");
+  await page.click('.meal-card:has-text("Tartiflette") [data-action="toggle"]');
 
   // Persisté côté serveur, pas seulement à l'écran.
   await page.reload();
@@ -980,7 +983,8 @@ test("la liste active est séparée en « pour la semaine » / « pour plus tard
   await page.mouse.up();
   await expect.poll(order).toEqual(["week", "later", "Tartiflette", "Curry"]);
   await expect(laterHeader.locator(".meal-section-count")).toHaveText("2");
-  await page.click('.meal-card:has-text("Curry") [data-action="toggle-later"]');
+  await page.click('.meal-card:has-text("Curry") [data-action="toggle"]');
+  await page.click('.meal-card:has-text("Curry") .later-pill[data-later="false"]');
   await expect.poll(order).toEqual(["week", "Curry", "later", "Tartiflette"]);
 
   // Archivé puis remis depuis l'historique : il revient « pour la semaine ».

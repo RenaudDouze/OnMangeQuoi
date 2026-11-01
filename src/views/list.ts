@@ -129,16 +129,15 @@ function sectionHeaderHtml(later: boolean, count: number): string {
   return `<li class="meal-section-header" data-section="${later ? "later" : "week"}"><h2>${label}</h2><span class="meal-section-count">${count}</span></li>`;
 }
 
-/** Déplace un repas actif d'une section à l'autre, d'un tap depuis la ligne
- * repliée (en plus du glissé d'une section à l'autre, voir wireMealList) :
- * c'est le geste le plus fréquent quand on prépare sa semaine. Libellé
- * d'action (où le repas va) plutôt que d'état : la section où il se trouve
- * dit déjà où il en est. La flèche suit l'ordre des sections à l'écran
- * (« semaine » au-dessus, « plus tard » en dessous). */
-function weekToggleHtml(meal: Meal): string {
+/** Choix de la section d'un repas actif (voir Meal.later), dans le volet
+ * déplié plutôt que sur la ligne repliée, où il prenait trop de place —
+ * le glissé d'une section à l'autre (voir wireMealList) reste possible
+ * carte repliée. Même forme que le temps de préparation. */
+function laterPickerHtml(meal: Meal): string {
   const later = isLater(meal);
-  const label = later ? "Passer pour la semaine" : "Repousser à plus tard";
-  return `<button type="button" class="week-toggle" data-action="toggle-later" data-later="${later}" aria-label="${label}" title="${label}">${later ? "↑ Semaine" : "↓ Plus tard"}</button>`;
+  const pill = (value: boolean, label: string): string =>
+    `<button type="button" class="later-pill" data-later="${value}" aria-pressed="${value === later}">${label}</button>`;
+  return `<div class="preptime-picker" role="group" aria-label="Planification">${pill(false, "📅 Pour la semaine")}${pill(true, "⏳ Pour plus tard")}</div>`;
 }
 
 function historyStatsHtml(archive: Meal[]): string {
@@ -531,6 +530,10 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
           archived
             ? ""
             : `<div class="meal-field">
+                <span class="meal-field-label">Planification</span>
+                ${laterPickerHtml(meal)}
+              </div>
+              <div class="meal-field">
                 <label class="meal-field-label" for="meal-planned-${escapeHtml(meal.id)}">Jour prévu</label>
                 <div class="meal-planned-date-row">
                   <input type="date" id="meal-planned-${escapeHtml(meal.id)}" class="meal-planned-date" data-action="planned-date" value="${meal.plannedDate ? toDateInputValue(meal.plannedDate) : ""}" />
@@ -583,7 +586,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
         ${toggleBtn}
         ${statusBadge}
         <h3 class="meal-title" data-action="edit-title" role="button" tabindex="0">${escapeHtml(meal.title)}</h3>
-        <div class="meal-controls">${archived ? "" : weekToggleHtml(meal)}${copyTitleBtn}${restoreBtn}</div>
+        <div class="meal-controls">${copyTitleBtn}${restoreBtn}</div>
       </div>
       ${details}
     </li>`;
@@ -1595,8 +1598,12 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       copyToClipboard(meal.title, "Titre copié.");
     });
 
-    card.querySelector<HTMLButtonElement>('[data-action="toggle-later"]')?.addEventListener("click", () => {
-      conn.send({ type: "setMealLater", id, later: !isLater(meal) });
+    card.querySelectorAll<HTMLButtonElement>(".later-pill").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const later = btn.dataset.later === "true";
+        if (later === isLater(meal)) return;
+        conn.send({ type: "setMealLater", id, later });
+      });
     });
 
     card.querySelectorAll<HTMLButtonElement>(".preptime-pill").forEach((btn) => {
