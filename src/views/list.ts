@@ -114,6 +114,41 @@ function filterPrepTimePickerHtml(active: Set<PrepTime>): string {
   return `<div class="preptime-picker" role="group" aria-label="Filtrer par temps de préparation">${pills}</div>`;
 }
 
+/** Planification grossière d'un repas actif (voir Meal.thisWeek) : deux
+ * valeurs seulement, d'où des clés locales au client plutôt qu'une enum
+ * partagée — le serveur ne connaît qu'un booléen. */
+type WeekFilter = "semaine" | "plus_tard";
+
+const WEEK_FILTERS: WeekFilter[] = ["semaine", "plus_tard"];
+
+const WEEK_LABELS: Record<WeekFilter, string> = {
+  semaine: "📅 Pour la semaine",
+  plus_tard: "⏳ Pour plus tard",
+};
+
+/** Absent sur un repas stocké avant l'ajout du champ : vaut « plus tard ». */
+function isThisWeek(meal: Meal): boolean {
+  return meal.thisWeek === true;
+}
+
+/** Bascule « pour la semaine » / « pour plus tard » sur la ligne repliée
+ * d'un repas actif : c'est le geste le plus fréquent quand on prépare sa
+ * semaine, il doit rester à un tap sans avoir à déplier la carte. Le libellé
+ * visible change avec l'état (plutôt qu'un simple aria-pressed sur un
+ * libellé fixe) car les deux valeurs ont chacune un sens propre. */
+function weekToggleHtml(meal: Meal): string {
+  const week = isThisWeek(meal);
+  const label = week ? "Pour la semaine — passer à pour plus tard" : "Pour plus tard — passer à pour la semaine";
+  return `<button type="button" class="week-toggle" data-action="toggle-this-week" data-this-week="${week}" aria-label="${label}" title="${label}">${week ? "📅 Semaine" : "⏳ Plus tard"}</button>`;
+}
+
+function filterWeekPickerHtml(active: Set<WeekFilter>): string {
+  const pills = WEEK_FILTERS.map(
+    (w) => `<button type="button" class="filter-week-pill" data-week="${w}" aria-pressed="${active.has(w)}">${WEEK_LABELS[w]}</button>`,
+  ).join("");
+  return `<div class="preptime-picker" role="group" aria-label="Filtrer par planification">${pills}</div>`;
+}
+
 function historyStatsHtml(archive: Meal[]): string {
   const stats = computeHistoryStats(archive);
   if (stats.total === 0) {
@@ -556,7 +591,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
         ${toggleBtn}
         ${statusBadge}
         <h3 class="meal-title" data-action="edit-title" role="button" tabindex="0">${escapeHtml(meal.title)}</h3>
-        <div class="meal-controls">${copyTitleBtn}${restoreBtn}</div>
+        <div class="meal-controls">${archived ? "" : weekToggleHtml(meal)}${copyTitleBtn}${restoreBtn}</div>
       </div>
       ${details}
     </li>`;
@@ -626,6 +661,10 @@ function layoutHtml(state: ListState, connected: boolean): string {
           <div id="filter-status-pills"></div>
         </div>
         <div class="filter-group">
+          <span class="meal-field-label">Planification</span>
+          <div id="filter-week-pills"></div>
+        </div>
+        <div class="filter-group">
           <span class="meal-field-label">Temps de préparation</span>
           <div id="filter-preptime-pills"></div>
         </div>
@@ -666,6 +705,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   // d'une visite à l'autre.
   const activeStatusFilters = new Set<MealStatus>();
   const activePrepTimeFilters = new Set<PrepTime>();
+  const activeWeekFilters = new Set<WeekFilter>();
   // Semaine affichée dans l'onglet Planning (voir renderPlanning) : le lundi
   // de la semaine courante par défaut.
   let weekStart = startOfWeek(Date.now());
@@ -990,6 +1030,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     root.querySelector("#filter-reset-btn")?.addEventListener("click", () => {
       activeStatusFilters.clear();
       activePrepTimeFilters.clear();
+      activeWeekFilters.clear();
       renderFilterPickers();
       renderMeals();
     });
@@ -1024,8 +1065,21 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         });
       });
     }
+    const weekEl = root.querySelector("#filter-week-pills") as HTMLElement | null;
+    if (weekEl) {
+      weekEl.innerHTML = filterWeekPickerHtml(activeWeekFilters);
+      weekEl.querySelectorAll<HTMLButtonElement>(".filter-week-pill").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const week = btn.dataset.week as WeekFilter;
+          if (activeWeekFilters.has(week)) activeWeekFilters.delete(week);
+          else activeWeekFilters.add(week);
+          renderFilterPickers();
+          renderMeals();
+        });
+      });
+    }
     const resetBtn = root.querySelector("#filter-reset-btn") as HTMLButtonElement | null;
-    if (resetBtn) resetBtn.hidden = activeStatusFilters.size === 0 && activePrepTimeFilters.size === 0;
+    if (resetBtn) resetBtn.hidden = activeStatusFilters.size === 0 && activePrepTimeFilters.size === 0 && activeWeekFilters.size === 0;
   }
 
   function wireToolbar(): void {
@@ -1350,6 +1404,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     let meals = state.meals;
     if (activeStatusFilters.size > 0) meals = meals.filter((m) => activeStatusFilters.has(m.status));
     if (activePrepTimeFilters.size > 0) meals = meals.filter((m) => m.prepTime !== null && activePrepTimeFilters.has(m.prepTime));
+    if (activeWeekFilters.size > 0) meals = meals.filter((m) => activeWeekFilters.has(isThisWeek(m) ? "semaine" : "plus_tard"));
     return sortByStatus
       ? [...meals].sort((a, b) => MEAL_STATUSES.indexOf(a.status) - MEAL_STATUSES.indexOf(b.status) || a.order - b.order)
       : [...meals].sort((a, b) => a.order - b.order);
@@ -1538,6 +1593,10 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
 
     card.querySelector<HTMLButtonElement>('[data-action="copy-title"]')?.addEventListener("click", () => {
       copyToClipboard(meal.title, "Titre copié.");
+    });
+
+    card.querySelector<HTMLButtonElement>('[data-action="toggle-this-week"]')?.addEventListener("click", () => {
+      conn.send({ type: "setMealThisWeek", id, thisWeek: !isThisWeek(meal) });
     });
 
     card.querySelectorAll<HTMLButtonElement>(".preptime-pill").forEach((btn) => {

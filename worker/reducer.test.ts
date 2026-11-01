@@ -39,6 +39,7 @@ function makeMeal(overrides: Partial<Meal> = {}): Meal {
     images: [],
     prepTime: null,
     plannedDate: null,
+    thisWeek: false,
     ...overrides,
   };
 }
@@ -108,6 +109,7 @@ describe("applyMessage: addMeal", () => {
         images: [],
         prepTime: null,
         plannedDate: null,
+        thisWeek: false,
       },
     ]);
   });
@@ -210,6 +212,7 @@ describe("applyMessage: updateMeal", () => {
           images: [],
           prepTime: null,
           plannedDate: null,
+          thisWeek: false,
         },
       ],
     });
@@ -435,6 +438,42 @@ describe("applyMessage: setMealPlannedDate", () => {
   });
 });
 
+describe("applyMessage: setMealThisWeek", () => {
+  it("marque un repas « pour la semaine » puis « pour plus tard »", () => {
+    const state = makeState();
+    applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
+    applyMessage(state, { type: "setMealThisWeek", id: "m1", thisWeek: true }, NOW + 1);
+    expect(state.meals[0].thisWeek).toBe(true);
+    expect(state.meals[0].updatedAt).toBe(NOW + 1);
+    applyMessage(state, { type: "setMealThisWeek", id: "m1", thisWeek: false }, NOW + 2);
+    expect(state.meals[0].thisWeek).toBe(false);
+    expect(state.meals[0].updatedAt).toBe(NOW + 2);
+  });
+
+  it("ne touche que le repas visé quand il y en a plusieurs", () => {
+    const state = makeState({ meals: [makeMeal({ id: "m1" }), makeMeal({ id: "m2", order: 1 })] });
+    applyMessage(state, { type: "setMealThisWeek", id: "m2", thisWeek: true }, NOW + 1);
+    expect(state.meals[0].thisWeek).toBe(false);
+    expect(state.meals[0].updatedAt).toBe(NOW);
+    expect(state.meals[1].thisWeek).toBe(true);
+  });
+
+  it("ignore un id inconnu", () => {
+    const state = makeState({ meals: [makeMeal({ id: "m1" })] });
+    applyMessage(state, { type: "setMealThisWeek", id: "ghost", thisWeek: true }, NOW + 1);
+    expect(state.meals[0].thisWeek).toBe(false);
+    expect(state.meals[0].updatedAt).toBe(NOW);
+  });
+
+  it("ignore une valeur qui n'est pas un booléen (personne n'est authentifié pour écrire dans une liste)", () => {
+    const state = makeState({ meals: [makeMeal({ id: "m1" })] });
+    // @ts-expect-error message forgé volontairement invalide, pour tester la défense côté serveur
+    applyMessage(state, { type: "setMealThisWeek", id: "m1", thisWeek: "oui" }, NOW + 1);
+    expect(state.meals[0].thisWeek).toBe(false);
+    expect(state.meals[0].updatedAt).toBe(NOW);
+  });
+});
+
 describe("applyMessage: addMealImage", () => {
   it("ajoute une photo à un repas actif", () => {
     const state = makeState();
@@ -579,6 +618,7 @@ describe("applyMessage: restoreDeletedMeal", () => {
       images: ["img1"],
       prepTime: "rapide",
       plannedDate: 333,
+      thisWeek: true,
     });
     applyMessage(state, { type: "restoreDeletedMeal", meal: deleted }, NOW + 5);
     const meal = state.meals.find((m) => m.id === "m1");
@@ -591,6 +631,7 @@ describe("applyMessage: restoreDeletedMeal", () => {
     expect(meal.images).toEqual(["img1"]);
     expect(meal.prepTime).toBe("rapide");
     expect(meal.plannedDate).toBe(333);
+    expect(meal.thisWeek).toBe(true);
     expect(meal.order).toBe(-1);
     expect(meal.updatedAt).toBe(NOW + 5);
   });
@@ -662,6 +703,7 @@ describe("applyMessage: restoreMeal", () => {
     const state = makeState();
     applyMessage(state, { type: "addMeal", id: "m1", title: "Tartiflette" }, NOW);
     applyMessage(state, { type: "setMealNote", id: "m1", note: "de_temps_en_temps" }, NOW);
+    applyMessage(state, { type: "setMealThisWeek", id: "m1", thisWeek: true }, NOW);
     applyMessage(state, { type: "setMealStatus", id: "m1", status: "fait" }, NOW + 1);
     applyMessage(state, { type: "restoreMeal", id: "m1" }, NOW + 2);
     expect(state.archive).toEqual([]);
@@ -670,6 +712,7 @@ describe("applyMessage: restoreMeal", () => {
     expect(meal.status).toBe("idee");
     expect(meal.doneAt).toBeNull();
     expect(meal.note).toBe("de_temps_en_temps");
+    expect(meal.thisWeek).toBe(false);
     expect(meal.updatedAt).toBe(NOW + 2);
   });
 
@@ -811,6 +854,7 @@ describe("applyMessage: importState", () => {
         images: "pas un tableau",
         prepTime: "preptime-invalide",
         plannedDate: "pas un nombre",
+        thisWeek: "oui",
       } as unknown as Meal;
       applyMessage(state, { type: "importState", mode: "replace", data: { name: "L", meals: [raw], archive: [] } }, NOW);
       const meal = state.meals[0];
@@ -824,6 +868,7 @@ describe("applyMessage: importState", () => {
       expect(meal.images).toEqual([]);
       expect(meal.prepTime).toBeNull();
       expect(meal.plannedDate).toBeNull();
+      expect(meal.thisWeek).toBe(false);
     });
 
     it("conserve les valeurs valides (statut, note, temps de préparation, dates, photos)", () => {
@@ -840,6 +885,7 @@ describe("applyMessage: importState", () => {
         images: ["img1", "img2"],
         prepTime: "rapide",
         plannedDate: 333,
+        thisWeek: true,
       });
       applyMessage(state, { type: "importState", mode: "replace", data: { name: "L", meals: [raw], archive: [] } }, NOW);
       const meal = state.meals[0];
@@ -852,6 +898,7 @@ describe("applyMessage: importState", () => {
       expect(meal.images).toEqual(["img1", "img2"]);
       expect(meal.prepTime).toBe("rapide");
       expect(meal.plannedDate).toBe(333);
+      expect(meal.thisWeek).toBe(true);
     });
 
     it("filtre les entrées non-chaînes d'images (y compris avant la troncature)", () => {
