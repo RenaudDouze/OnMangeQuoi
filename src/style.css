@@ -1127,6 +1127,23 @@ button:focus-visible,
   gap: 0.25rem;
 }
 
+/* Planification + jour prévu (voir mealCardHtml) : l'un sous l'autre sur
+   mobile, côte à côte dès qu'il y a la place. */
+.meal-planning-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (min-width: 600px) {
+  .meal-planning-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.5rem 1.5rem;
+  }
+}
+
 .meal-field-label {
   font-size: 0.75rem;
   color: var(--text-muted);

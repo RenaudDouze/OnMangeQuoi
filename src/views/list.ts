@@ -529,19 +529,21 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
         ${
           archived
             ? ""
-            : `<div class="meal-field">
-                <span class="meal-field-label">Planification</span>
-                ${laterPickerHtml(meal)}
-              </div>
-              <div class="meal-field">
-                <label class="meal-field-label" for="meal-planned-${escapeHtml(meal.id)}">Jour prévu</label>
-                <div class="meal-planned-date-row">
-                  <input type="date" id="meal-planned-${escapeHtml(meal.id)}" class="meal-planned-date" data-action="planned-date" value="${meal.plannedDate ? toDateInputValue(meal.plannedDate) : ""}" />
-                  ${
-                    meal.plannedDate
-                      ? `<button type="button" class="icon-btn" data-action="clear-planned-date" aria-label="Retirer le jour prévu">${icons.close}</button>`
-                      : ""
-                  }
+            : `<div class="meal-planning-row">
+                <div class="meal-field">
+                  <span class="meal-field-label">Planification</span>
+                  ${laterPickerHtml(meal)}
+                </div>
+                <div class="meal-field">
+                  <label class="meal-field-label" for="meal-planned-${escapeHtml(meal.id)}">Jour prévu</label>
+                  <div class="meal-planned-date-row">
+                    <input type="date" id="meal-planned-${escapeHtml(meal.id)}" class="meal-planned-date" data-action="planned-date" value="${meal.plannedDate ? toDateInputValue(meal.plannedDate) : ""}" />
+                    ${
+                      meal.plannedDate
+                        ? `<button type="button" class="icon-btn" data-action="clear-planned-date" aria-label="Retirer le jour prévu">${icons.close}</button>`
+                        : ""
+                    }
+                  </div>
                 </div>
               </div>`
         }
