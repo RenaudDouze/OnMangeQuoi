@@ -20,7 +20,7 @@ function makeMeal(overrides: Partial<Meal> = {}): Meal {
     images: [],
     prepTime: null,
     plannedDate: null,
-    thisWeek: false,
+    later: false,
     ...overrides,
   };
 }
@@ -41,7 +41,7 @@ describe("encodeSnapshotToParam / decodeSnapshotFromParam", () => {
           doneAt: 3000,
           prepTime: "rapide",
           plannedDate: 4000,
-          thisWeek: true,
+          later: true,
           images: ["ignoré"],
         }),
       ],
@@ -62,7 +62,7 @@ describe("encodeSnapshotToParam / decodeSnapshotFromParam", () => {
     expect(meal.doneAt).toBe(3000);
     expect(meal.prepTime).toBe("rapide");
     expect(meal.plannedDate).toBe(4000);
-    expect(meal.thisWeek).toBe(true);
+    expect(meal.later).toBe(true);
     // Jamais transportées : régénérées/vidées au décodage.
     expect(meal.id).toBe("");
     expect(meal.images).toEqual([]);
@@ -80,13 +80,13 @@ describe("encodeSnapshotToParam / decodeSnapshotFromParam", () => {
     expect(meal.doneAt).toBeNull();
     expect(meal.prepTime).toBeNull();
     expect(meal.plannedDate).toBeNull();
-    expect(meal.thisWeek).toBe(false);
+    expect(meal.later).toBe(false);
   });
 
   it("retombe sur idee/valeurs par défaut si le JSON décompressé contient des champs invalides", () => {
     const json = JSON.stringify({
       n: "L",
-      m: [{ t: "Repas", s: "statut-invalide", n: "note-invalide", o: 1, c: null, cr: "x", u: "x", d: "x", p: "invalide", pd: "x", w: "oui" }],
+      m: [{ t: "Repas", s: "statut-invalide", n: "note-invalide", o: 1, c: null, cr: "x", u: "x", d: "x", p: "invalide", pd: "x", l: "oui" }],
       a: [],
     });
     // Réencode "à la main" un JSON invalide (plutôt que de passer par
@@ -104,7 +104,7 @@ describe("encodeSnapshotToParam / decodeSnapshotFromParam", () => {
     expect(meal.doneAt).toBeNull();
     expect(meal.prepTime).toBeNull();
     expect(meal.plannedDate).toBeNull();
-    expect(meal.thisWeek).toBe(false);
+    expect(meal.later).toBe(false);
   });
 
   it("tronque un titre décodé trop long à MAX_TITLE_LENGTH", () => {

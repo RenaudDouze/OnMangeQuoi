@@ -1061,49 +1061,50 @@ button:focus-visible,
   background: #c9822c;
 }
 
-/* Planification (voir Meal.thisWeek) : même forme de pastille que le temps
-   de préparation. .filter-week-pill (panneau de filtre) et .week-toggle
-   (ligne repliée d'une carte) restent deux classes distinctes pour la même
-   raison que .filter-status-pill/.status-pill. */
-.filter-week-pill,
+/* Sections « pour la semaine » / « pour plus tard » de la liste active
+   (voir sectionHeaderHtml) : de simples intertitres entre les cartes, pas
+   des cartes elles-mêmes. */
+.meal-section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.25rem 0.25rem 0;
+}
+
+.meal-section-header + .meal-section-header,
+.meal-card + .meal-section-header {
+  margin-top: 0.75rem;
+}
+
+.meal-section-header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.meal-section-count {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Bouton de changement de section sur la ligne repliée d'une carte (voir
+   weekToggleHtml) : une action, donc neutre, pas coloré selon l'état. */
 .week-toggle {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-muted);
   border-radius: 999px;
-  padding: 0.35em 0.8em;
-  font-size: 0.78rem;
+  padding: 0.25em 0.6em;
+  font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.filter-week-pill:hover,
 .week-toggle:hover {
   background: var(--checked-bg);
-}
-
-.filter-week-pill[aria-pressed="true"],
-.week-toggle[data-this-week="true"] {
-  color: #fff;
-  border-color: transparent;
-}
-
-.filter-week-pill[data-week="semaine"][aria-pressed="true"],
-.week-toggle[data-this-week="true"] {
-  background: var(--primary-dark);
-}
-
-.filter-week-pill[data-week="plus_tard"][aria-pressed="true"] {
-  background: #8d8177;
-}
-
-/* Sur la ligne repliée, plus compacte que dans le panneau de filtre : elle
-   partage la ligne avec le titre, qui doit garder un maximum de place. */
-.week-toggle {
-  padding: 0.25em 0.6em;
-  font-size: 0.72rem;
-  flex-shrink: 0;
 }
 
 .meal-details {
