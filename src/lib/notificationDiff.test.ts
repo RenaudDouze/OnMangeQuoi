@@ -17,6 +17,7 @@ function makeMeal(overrides: Partial<Meal> = {}): Meal {
     images: [],
     prepTime: null,
     plannedDate: null,
+    thisWeek: false,
     ...overrides,
   };
 }

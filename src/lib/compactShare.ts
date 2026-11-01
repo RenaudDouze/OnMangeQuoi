@@ -28,6 +28,8 @@ interface CompactMeal {
   d?: number;
   p?: PrepTime;
   pd?: number;
+  /** « Pour la semaine » (Meal.thisWeek) : omis si faux, le cas par défaut. */
+  w?: 1;
 }
 
 interface CompactSnapshot {
@@ -48,6 +50,7 @@ function toCompact(meal: Meal): CompactMeal {
     ...(meal.doneAt ? { d: meal.doneAt } : {}),
     ...(meal.prepTime ? { p: meal.prepTime } : {}),
     ...(meal.plannedDate ? { pd: meal.plannedDate } : {}),
+    ...(meal.thisWeek === true ? { w: 1 as const } : {}),
   };
 }
 
@@ -71,6 +74,7 @@ function fromCompact(raw: Partial<CompactMeal>): Meal {
     images: [],
     prepTime: typeof raw.p === "string" && (PREP_TIMES as string[]).includes(raw.p) ? raw.p : null,
     plannedDate: typeof raw.pd === "number" ? raw.pd : null,
+    thisWeek: raw.w === 1,
   };
 }
 

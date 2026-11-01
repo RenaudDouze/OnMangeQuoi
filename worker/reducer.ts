@@ -74,6 +74,7 @@ function sanitizeMeal(raw: Meal, order: number, now: number): Meal {
     // même raisonnement que pour "status" ci-dessus.
     prepTime: raw.prepTime != null && (PREP_TIMES as string[]).includes(raw.prepTime) ? raw.prepTime : null,
     plannedDate: typeof raw.plannedDate === "number" ? raw.plannedDate : null,
+    thisWeek: raw.thisWeek === true,
   };
 }
 
@@ -153,6 +154,7 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
         images: [],
         prepTime: null,
         plannedDate: null,
+        thisWeek: false,
       };
       state.meals.push(meal);
       return;
@@ -223,6 +225,17 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       return;
     }
 
+    case "setMealThisWeek": {
+      // Voir le commentaire dans "setMealStatus" : rien ne garantit à
+      // l'exécution qu'un message reçu par websocket porte bien un booléen.
+      if (typeof msg.thisWeek !== "boolean") return;
+      const meal = findMeal(state, msg.id);
+      if (!meal) return;
+      meal.thisWeek = msg.thisWeek;
+      meal.updatedAt = now;
+      return;
+    }
+
     // Émis par le worker (pas directement par un client) une fois l'upload
     // effectivement passé en R2 — voir worker/index.ts, qui génère lui-même
     // un imageId frais avant d'appeler cette route interne.
@@ -288,6 +301,10 @@ export function applyMessage(state: ListState, msg: ClientMessage, now: number =
       const [meal] = state.archive.splice(idx, 1);
       meal.status = "idee";
       meal.doneAt = null;
+      // Un repas remis en liste depuis l'historique repart « pour plus
+      // tard » : le marqueur « pour la semaine » qu'il portait date de la
+      // semaine où il a été fait, plus de celle-ci.
+      meal.thisWeek = false;
       meal.updatedAt = now;
       meal.order = nextOrder(state.meals);
       state.meals.push(meal);
