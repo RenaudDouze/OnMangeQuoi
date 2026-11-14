@@ -34,7 +34,7 @@ export default {
   tsconfigFile: "tsconfig.stryker-unused.json",
   thresholds: {
     high: 100,
-    low: 90,
-    break: 95,
+    low: 100,
+    break: 100,
   },
 };
