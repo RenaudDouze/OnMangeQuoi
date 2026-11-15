@@ -6,6 +6,16 @@ import { apiUrl } from "./syncWorker";
  * lui-même), dont le message brut ne convient pas pour l'utilisateur. */
 export class ApiError extends Error {}
 
+/** Message d'erreur renvoyé par le serveur (`{ error }`), ou `fallback` si la
+ * réponse n'est pas du JSON ou n'en contient pas. */
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  const message: string | undefined = await res.json().then(
+    (body: { error?: string }) => body.error,
+    () => undefined,
+  );
+  return message || fallback;
+}
+
 export async function createList(name: string): Promise<ListState> {
   const res = await fetch(apiUrl("/api/lists"), {
     method: "POST",
@@ -13,8 +23,7 @@ export async function createList(name: string): Promise<ListState> {
     body: JSON.stringify({ name }),
   });
   if (!res.ok) {
-    const body: { error?: string } | null = await res.json().catch(() => null);
-    throw new ApiError(body?.error || "Impossible de créer la liste.");
+    throw new ApiError(await errorMessage(res, "Impossible de créer la liste."));
   }
   return res.json();
 }
@@ -23,8 +32,7 @@ export async function fetchListState(code: string): Promise<ListState | null> {
   const res = await fetch(apiUrl(`/api/lists/${encodeURIComponent(code)}`));
   if (res.status === 404) return null;
   if (!res.ok) {
-    const body: { error?: string } | null = await res.json().catch(() => null);
-    throw new ApiError(body?.error || "Erreur réseau.");
+    throw new ApiError(await errorMessage(res, "Erreur réseau."));
   }
   return res.json();
 }
@@ -46,15 +54,13 @@ export async function uploadMealImage(code: string, mealId: string, file: Blob):
     body: file,
   });
   if (!res.ok) {
-    const body: { error?: string } | null = await res.json().catch(() => null);
-    throw new ApiError(body?.error || "Impossible d'envoyer l'image.");
+    throw new ApiError(await errorMessage(res, "Impossible d'envoyer l'image."));
   }
 }
 
 export async function deleteMealImage(code: string, mealId: string, imageId: string): Promise<void> {
   const res = await fetch(apiUrl(`${mealImagesPath(code, mealId)}/${encodeURIComponent(imageId)}`), { method: "DELETE" });
   if (!res.ok) {
-    const body: { error?: string } | null = await res.json().catch(() => null);
-    throw new ApiError(body?.error || "Impossible de supprimer l'image.");
+    throw new ApiError(await errorMessage(res, "Impossible de supprimer l'image."));
   }
 }

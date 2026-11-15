@@ -96,17 +96,17 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
       </div>
     `;
 
-    root.querySelector("#theme-toggle")?.addEventListener("click", () => {
+    root.querySelector("#theme-toggle")!.addEventListener("click", () => {
       cycleThemePreference();
       render();
     });
 
-    root.querySelector("#a11y-toggle")?.addEventListener("click", () => {
+    root.querySelector("#a11y-toggle")!.addEventListener("click", () => {
       setAccessibilityPreference(!a11yEnabled);
       render();
     });
 
-    root.querySelector("#create-form")?.addEventListener("submit", async (e) => {
+    root.querySelector("#create-form")!.addEventListener("submit", async (e) => {
       e.preventDefault();
       const form = e.target as HTMLFormElement;
       const nameInput = root.querySelector("#create-name") as HTMLInputElement;
@@ -123,24 +123,24 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
     });
 
     root.querySelector("#import-snapshot-create")?.addEventListener("click", async (e) => {
-      if (!importedSnapshot || !importParam) return;
+      // Le bouton n'est rendu qu'avec un aperçu valide (voir render()).
       const btn = e.currentTarget as HTMLButtonElement;
       btn.disabled = true;
       try {
-        const created = await createList(importedSnapshot.name.trim() || "On mange quoi ?");
+        const created = await createList(importedSnapshot!.name.trim() || "On mange quoi ?");
         touchRecentList(created.code, created.name);
         // Transmet le même paramètre à la vue Liste plutôt que d'y envoyer
         // "importState" directement d'ici : un seul endroit (maybeHandleImportParam
         // dans src/views/list.ts) décode et applique un lien figé, que la
         // liste vienne d'être créée pour l'occasion ou qu'elle existait déjà.
-        navigate(`/l/${created.code}?import=${encodeURIComponent(importParam)}`);
+        navigate(`/l/${created.code}?import=${encodeURIComponent(importParam!)}`);
       } catch (err) {
         alert(err instanceof ApiError ? err.message : "Impossible de créer la liste. Vérifie ta connexion internet.");
         btn.disabled = false;
       }
     });
 
-    root.querySelector("#join-form")?.addEventListener("submit", async (e) => {
+    root.querySelector("#join-form")!.addEventListener("submit", async (e) => {
       e.preventDefault();
       const form = e.target as HTMLFormElement;
       const input = root.querySelector("#join-code") as HTMLInputElement;
@@ -171,9 +171,8 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
       btn.addEventListener("click", () => navigate(`/l/${btn.dataset.code}`));
     });
     root.querySelectorAll<HTMLButtonElement>(".recent-forget").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (btn.dataset.code) forgetRecentList(btn.dataset.code);
+      btn.addEventListener("click", () => {
+        forgetRecentList(btn.dataset.code!);
         render();
       });
     });
