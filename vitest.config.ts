@@ -1,10 +1,17 @@
 import { defineConfig } from "vitest/config";
+import path from "node:path";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // Voir worker/test/cloudflareWorkersShim.ts.
+      "cloudflare:workers": path.resolve(import.meta.dirname, "worker/test/cloudflareWorkersShim.ts"),
+    },
+  },
   test: {
     environment: "node",
     globals: true,
-    include: ["shared/**/*.test.ts", "worker/**/*.test.ts", "src/lib/*.test.ts"],
+    include: ["shared/**/*.test.ts", "worker/**/*.test.ts", "src/**/*.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "lcov"],

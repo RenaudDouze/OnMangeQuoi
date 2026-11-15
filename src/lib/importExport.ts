@@ -13,7 +13,6 @@ export function exportListState(state: ListState): void {
   const url = URL.createObjectURL(blob);
   const slug =
     state.name
-      .trim()
       .toLowerCase()
       .normalize("NFD")
       .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
@@ -37,17 +36,17 @@ export async function parseImportFile(file: File): Promise<ImportPayload> {
     throw new Error("Ce fichier n'est pas un JSON valide.");
   }
   if (
-    typeof data !== "object" ||
     data === null ||
     !Array.isArray((data as ImportPayload).meals) ||
     !Array.isArray((data as ImportPayload).archive)
   ) {
     throw new Error("Ce fichier ne ressemble pas à un export de liste de repas.");
   }
-  const parsed = data as Partial<ImportPayload>;
+  // meals/archive sont garantis tableaux par la validation ci-dessus.
+  const parsed = data as ImportPayload;
   return {
     name: typeof parsed.name === "string" ? parsed.name : "",
-    meals: parsed.meals ?? [],
-    archive: parsed.archive ?? [],
+    meals: parsed.meals,
+    archive: parsed.archive,
   };
 }

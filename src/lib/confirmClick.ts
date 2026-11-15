@@ -14,11 +14,13 @@ const DEFAULT_TIMEOUT_MS = 3000;
 export function wireConfirmClick(el: HTMLElement, opts: ConfirmClickOptions): void {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const originalLabel = el.getAttribute("aria-label");
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
   const disarm = (): void => {
-    if (timer !== null) clearTimeout(timer);
-    timer = null;
+    // clearTimeout ignore silencieusement un id undefined (aucun timer
+    // programmé) : pas besoin de le vérifier nous-mêmes.
+    clearTimeout(timer);
+    timer = undefined;
     el.classList.remove("confirm-armed");
     if (originalLabel !== null) el.setAttribute("aria-label", originalLabel);
   };
