@@ -123,4 +123,15 @@ describe("startEdit", () => {
     input.dispatchEvent(new Event("blur"));
     expect(onCommit).toHaveBeenCalledOnce();
   });
+
+  it("les touches saisies ne remontent pas à l'élément éditable", () => {
+    const onKey = vi.fn();
+    el.addEventListener("keydown", onKey);
+    startEdit(el, { value: "Pommes", onCommit: vi.fn() });
+    const input = el.querySelector("input")!;
+    for (const key of ["Enter", "Escape", " ", "a"]) {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    }
+    expect(onKey).not.toHaveBeenCalled();
+  });
 });

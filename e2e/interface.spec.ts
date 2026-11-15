@@ -186,11 +186,8 @@ test("le titre de la liste est modifiable en ligne, et persiste après rechargem
   await page.click("#list-title");
   await page.fill("#list-title .inline-edit", "Nos repas de la semaine");
   await page.keyboard.press("Enter");
-  // L'éditeur reste affiché (input) le temps de l'aller-retour serveur ;
-  // c'est en rechargeant (nouveau montage de la coquille) que le titre
-  // confirmé s'affiche comme simple texte — voir la vue synchronisée depuis
-  // un autre appareil dans e2e/sync.spec.ts pour la version "temps réel".
-  await expect(page.locator("#list-title .inline-edit")).toHaveValue("Nos repas de la semaine");
+  await expect(page.locator("#list-title")).toHaveText("Nos repas de la semaine");
+  await expect(page.locator("#list-title .inline-edit")).toHaveCount(0);
 
   await page.reload();
   await expect(page.locator(".conn-dot")).toHaveClass(/online/, { timeout: 10_000 });
