@@ -4,6 +4,7 @@ export function renderQrSvg(text: string): Promise<string> {
   return QRCode.toString(text, {
     type: "svg",
     margin: 1,
-    color: { dark: "#000000", light: "#00000000" },
+    // Modules en noir (valeur par défaut), fond transparent.
+    color: { light: "#00000000" },
   });
 }

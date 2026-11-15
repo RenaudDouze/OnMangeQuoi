@@ -72,6 +72,12 @@ describe("mountHomeView", () => {
     history.replaceState({}, "", "/");
   });
 
+  it("le nettoyage renvoyé est sans effet", () => {
+    const stop = mount();
+    expect(() => stop()).not.toThrow();
+    expect(root.querySelector("h1")).not.toBeNull();
+  });
+
   it("affiche l'accueil sans liste récente, avec l'avertissement de confidentialité, sans texte parasite", () => {
     mount();
     expect(root.querySelector("h1")!.textContent).toBe("OnMangeQuoi");

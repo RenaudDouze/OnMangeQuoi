@@ -408,4 +408,121 @@ describe("routes restantes", () => {
     expect(await res.text()).toBe("page");
     expect(assets).toHaveBeenCalledOnce();
   });
+describe("limiteurs de débit : requêtes autorisées", () => {
+  const withIp = { "CF-Connecting-IP": "7.7.7.7" };
+
+  it("lecture de liste, WebSocket, lecture et écriture d'images passent quand le limiteur accepte", async () => {
+    const read = limiter(true);
+    const write = limiter(true);
+    const { bucket } = makeBucket({ "meals/ABC123/m1/img-1": { body: "x" } });
+    const env = makeEnv(() => Response.json(emptyState("ABC123")), { read: read.limiter, imageWrite: write.limiter, bucket });
+
+    expect((await worker.fetch(req("https://app.example/api/lists/abc123", { headers: withIp }), env)).status).toBe(200);
+    expect((await worker.fetch(req("https://app.example/api/lists/abc123/ws", { headers: withIp }), env)).status).toBe(200);
+    expect((await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images/img-1", { headers: withIp }), env)).status).toBe(200);
+    expect(read.limit).toHaveBeenCalledTimes(3);
+    expect(read.limit).toHaveBeenCalledWith({ key: "7.7.7.7" });
+
+    const post = await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images", { method: "POST", body: new Uint8Array([1]), headers: { "content-type": "image/png", ...withIp } }), env);
+    expect(post.status).toBe(200);
+    const del = await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images/img-1", { method: "DELETE", headers: withIp }), env);
+    expect(del.status).toBe(200);
+    expect(write.limit).toHaveBeenCalledTimes(2);
+    expect(write.limit).toHaveBeenCalledWith({ key: "7.7.7.7" });
+  });
+});
+describe("détails (mutation)", () => {
+  const noIpFailing = () => ({ read: limiter(false), create: limiter(false), write: limiter(false) });
+
+  it("les erreurs sont du JSON (type de contenu, message, CORS)", async () => {
+    const l = limiter(false);
+    const res = await worker.fetch(req("https://app.example/api/lists/ABC123", { headers: { "CF-Connecting-IP": "1.1.1.1" } }), makeEnv(() => new Response("{}"), { read: l.limiter }));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("content-type")).toBe("application/json");
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("GET /api/lists ne crée rien (seul POST crée)", async () => {
+    const seen: string[] = [];
+    const res = await worker.fetch(req("https://app.example/api/lists"), makeEnv((code, input) => (seen.push(pathOf(input)), new Response("{}"))));
+    expect(res.status).toBe(404);
+    expect(seen).toEqual([]);
+  });
+
+  it("les routes ne sont reconnues qu'à la racine du chemin (assets sinon)", async () => {
+    const assets = vi.fn(async () => new Response("page"));
+    const env = makeEnv(() => new Response("{}"), { assetsFetch: assets });
+    for (const url of [
+      "https://app.example/x/api/lists/ABC123",
+      "https://app.example/x/api/lists/abc123/meals/m1/images",
+      "https://app.example/x/api/lists/abc123/meals/m1/images/img-1",
+    ]) {
+      const method = url.endsWith("images") ? "POST" : "GET";
+      const res = await worker.fetch(req(url, { method, ...(method === "POST" ? { body: "x", headers: { "content-type": "image/png" } } : {}) }), env);
+      expect(await res.text()).toBe("page");
+    }
+    expect(assets).toHaveBeenCalledTimes(3);
+  });
+
+  it("une route d'images sans id : seul POST est traité, GET est une route API inconnue", async () => {
+    const res = await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images"), makeEnv(() => new Response("{}")));
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not found");
+  });
+
+  it("sans en-tête IP, aucun limiteur n'est consulté (lecture, WebSocket, images)", async () => {
+    const { read, write } = noIpFailing();
+    const { bucket } = makeBucket({ "meals/ABC123/m1/img-1": { body: "x" } });
+    const env = makeEnv(() => Response.json(emptyState("ABC123")), { read: read.limiter, imageWrite: write.limiter, bucket });
+    expect((await worker.fetch(req("https://app.example/api/lists/abc123"), env)).status).toBe(200);
+    expect((await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images/img-1"), env)).status).toBe(200);
+    const post = await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images", { method: "POST", body: new Uint8Array([1]), headers: { "content-type": "image/png" } }), env);
+    expect(post.status).toBe(200);
+    expect((await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images/img-1", { method: "DELETE" }), env)).status).toBe(200);
+    expect(read.limit).not.toHaveBeenCalled();
+    expect(write.limit).not.toHaveBeenCalled();
+  });
+
+  it("une image sans type de contenu est refusée (415)", async () => {
+    const res = await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images", { method: "POST", body: new Uint8Array([1]) }), makeEnv(() => new Response("{}")));
+    expect(res.status).toBe(415);
+  });
+
+  it("les messages d'erreur d'image et de limitation sont exacts", async () => {
+    const tooBig = await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images", { method: "POST", body: new Uint8Array(5 * 1024 * 1024 + 1), headers: { "content-type": "image/png" } }), makeEnv(() => new Response("{}")));
+    expect((await readJson(tooBig)).error).toBe("Image trop volumineuse (5 Mo max).");
+    const l = limiter(false);
+    const get = await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images/img-1", { headers: { "CF-Connecting-IP": "1.1.1.1" } }), makeEnv(() => new Response("{}"), { read: l.limiter }));
+    expect((await readJson(get)).error).toBe("Trop de tentatives, réessaie dans une minute.");
+    const del = await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images/img-1", { method: "DELETE", headers: { "CF-Connecting-IP": "1.1.1.1" } }), makeEnv(() => new Response("{}"), { imageWrite: l.limiter }));
+    expect((await readJson(del)).error).toBe("Trop de tentatives, réessaie dans une minute.");
+    const missing = await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images/zzz"), makeEnv(() => new Response("{}")));
+    expect(await missing.text()).toBe("Not found");
+  });
+
+  it("les appels à la salle (ajout / retrait d'image) sont des POST JSON", async () => {
+    const seen: Array<{ init?: RequestInit }> = [];
+    const handler: FakeHandler = (code, _input, init) => {
+      seen.push({ init });
+      return Response.json(emptyState(code));
+    };
+    const { bucket } = makeBucket();
+    await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images", { method: "POST", body: new Uint8Array([1]), headers: { "content-type": "image/png" } }), makeEnv(handler, { bucket }));
+    await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images/img-1", { method: "DELETE" }), makeEnv(handler, { bucket }));
+    for (const { init } of seen) {
+      expect(init?.method).toBe("POST");
+      expect(init?.headers).toEqual({ "content-type": "application/json" });
+    }
+    expect(seen).toHaveLength(2);
+  });
+});
+
+describe("route d'une image précise", () => {
+  it("un chemin plus long que la route n'est pas servi comme une image", async () => {
+    const { bucket } = makeBucket({ "meals/ABC123/m1/img-1": { body: "x" } });
+    const res = await worker.fetch(req("https://app.example/api/lists/abc123/meals/m1/images/img-1/extra"), makeEnv(() => new Response("{}"), { bucket }));
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not found");
+  });
+});
 });

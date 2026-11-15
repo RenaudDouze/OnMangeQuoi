@@ -77,4 +77,9 @@ describe("computeHistoryStats", () => {
     expect(computeHistoryStats([meal({ title: "A" }), meal({ title: "A" })]).topMeals).toEqual([{ title: "A", count: 2 }]);
     expect(computeHistoryStats([meal({ title: "A" })]).topMeals).toEqual([]);
   });
+
+  it("ne regroupe que les titres identiques à la casse près (ß et SS restent distincts)", () => {
+    const stats = computeHistoryStats([meal({ title: "Straße" }), meal({ title: "STRASSE" })]);
+    expect(stats.topMeals).toEqual([]);
+  });
 });

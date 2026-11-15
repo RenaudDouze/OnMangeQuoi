@@ -26,7 +26,7 @@ function generateCode(length = 6): string {
 }
 
 function normalizeCode(code: string): string {
-  return code.trim().toUpperCase();
+  return code.toUpperCase();
 }
 
 // Avant les photos multiples, une image vivait à la clé 2 segments
@@ -171,14 +171,15 @@ export default {
         }
       }
 
-      const contentType = request.headers.get("content-type") ?? "";
-      if (!(ALLOWED_IMAGE_TYPES as readonly string[]).includes(contentType)) {
+      const contentType = request.headers.get("content-type");
+      if (!(ALLOWED_IMAGE_TYPES as readonly (string | null)[]).includes(contentType)) {
         return jsonError("Format d'image non supporté.", 415);
       }
       // Vérifie d'abord l'en-tête (rejet rapide sans lire le corps), puis
       // la taille réelle une fois lue : l'en-tête n'est qu'une déclaration
       // du client, pas une garantie.
-      const declaredLength = Number(request.headers.get("content-length") ?? "0");
+      // Absent : Number(null) vaut 0.
+      const declaredLength = Number(request.headers.get("content-length"));
       if (declaredLength > MAX_IMAGE_BYTES) {
         return jsonError("Image trop volumineuse (5 Mo max).", 413);
       }
@@ -192,7 +193,7 @@ export default {
       // version pour invalider le cache navigateur.
       const imageId = crypto.randomUUID();
       const key = mealImageKey(code, mealId, imageId);
-      await env.MEAL_IMAGES.put(key, bytes, { httpMetadata: { contentType } });
+      await env.MEAL_IMAGES.put(key, bytes, { httpMetadata: { contentType: contentType! } });
 
       const stub = env.MEAL_ROOM.get(env.MEAL_ROOM.idFromName(code));
       const res = await stub.fetch("https://list.internal/apply", {

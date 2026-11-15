@@ -131,4 +131,10 @@ describe("diffForNotifications", () => {
       { kind: "added", meal: next.meals[1] },
     ]);
   });
+
+  it("un repas resté dans l'historique (même s'il y change) n'est jamais signalé", () => {
+    const previous = makeState({ archive: [makeMeal({ id: "a", status: "idee" })] });
+    const next = makeState({ archive: [makeMeal({ id: "a", status: "fait" })] });
+    expect(diffForNotifications(previous, next)).toEqual([]);
+  });
 });

@@ -204,7 +204,8 @@ function planningHtml(activeMeals: Meal[], weekStart: number): string {
   const days = PLANNING_DAY_LABELS.map((label, i) => {
     const dayStart = addDays(weekStart, i);
     const dayEnd = addDays(weekStart, i + 1);
-    const dayMeals = activeMeals.filter((m) => m.plannedDate !== null && m.plannedDate >= dayStart && m.plannedDate < dayEnd);
+    // plannedDate nul : toute comparaison avec un nombre est fausse.
+    const dayMeals = activeMeals.filter((m) => m.plannedDate! >= dayStart && m.plannedDate! < dayEnd);
     const isToday = dayStart === todayDayStart;
     const entries = dayMeals.length
       ? dayMeals
@@ -300,17 +301,17 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
     if (e.target === overlay) close();
   });
   document.addEventListener("keydown", onKeydown);
-  overlay.querySelector(".modal-close")?.addEventListener("click", close);
-  overlay.querySelector("#mark-done-cancel")?.addEventListener("click", close);
+  overlay.querySelector(".modal-close")!.addEventListener("click", close);
+  overlay.querySelector("#mark-done-cancel")!.addEventListener("click", close);
   overlay.querySelectorAll<HTMLButtonElement>(".note-option").forEach((btn) => {
     btn.addEventListener("click", () => {
       overlay.querySelectorAll(".note-option").forEach((b) => b.setAttribute("aria-pressed", "false"));
       btn.setAttribute("aria-pressed", "true");
     });
   });
-  overlay.querySelector("#mark-done-confirm")?.addEventListener("click", () => {
-    const noteBtn = overlay.querySelector<HTMLButtonElement>('.note-option[aria-pressed="true"]');
-    const note = noteBtn?.dataset.note || "";
+  overlay.querySelector("#mark-done-confirm")!.addEventListener("click", () => {
+    // Une option est toujours marquée (voir noteVisualPickerHtml).
+    const note = overlay.querySelector<HTMLButtonElement>('.note-option[aria-pressed="true"]')!.dataset.note!;
     const comment = (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement).value;
     const dateValue = (overlay.querySelector("#mark-done-date") as HTMLInputElement).value;
     const doneAt = dateValue ? fromDateInputValue(dateValue) : Date.now();
@@ -318,7 +319,7 @@ function openMarkDoneModal(meal: Meal, onConfirm: (note: Meal["note"], comment: 
     onConfirm(note ? (note as Meal["note"]) : null, comment, doneAt);
   });
 
-  (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement)?.focus();
+  (overlay.querySelector("#mark-done-comment") as HTMLTextAreaElement).focus();
 }
 
 /** Choix fusionner/remplacer après un import JSON (menu "Exporter/Importer",
@@ -357,13 +358,13 @@ function openImportModal(data: ImportPayload, onImport: (mode: "merge" | "replac
     if (e.target === overlay) close();
   });
   document.addEventListener("keydown", onKeydown);
-  overlay.querySelector(".modal-close")?.addEventListener("click", close);
-  overlay.querySelector("#import-cancel")?.addEventListener("click", close);
-  overlay.querySelector("#import-merge")?.addEventListener("click", () => {
+  overlay.querySelector(".modal-close")!.addEventListener("click", close);
+  overlay.querySelector("#import-cancel")!.addEventListener("click", close);
+  overlay.querySelector("#import-merge")!.addEventListener("click", () => {
     close();
     onImport("merge", data);
   });
-  overlay.querySelector("#import-replace")?.addEventListener("click", () => {
+  overlay.querySelector("#import-replace")!.addEventListener("click", () => {
     if (confirm("Remplacer entièrement la liste actuelle par le contenu importé ?")) {
       close();
       onImport("replace", data);
@@ -378,7 +379,6 @@ function openImportModal(data: ImportPayload, onImport: (mode: "merge" | "replac
  * navigation précédent/suivant (boutons, flèches clavier) ne s'affiche que
  * s'il y en a plus d'une. */
 function openImageLightbox(images: { url: string; alt: string }[], startIndex: number): void {
-  if (images.length === 0) return;
   let index = startIndex;
   const triggerEl = document.activeElement;
   const overlay = document.createElement("div");
@@ -397,7 +397,7 @@ function openImageLightbox(images: { url: string; alt: string }[], startIndex: n
 
   function go(delta: number): void {
     index = (index + delta + images.length) % images.length;
-    renderContent(delta > 0 ? "next" : "prev");
+    renderContent(delta === 1 ? "next" : "prev");
   }
 
   function onKeydown(e: KeyboardEvent): void {
@@ -410,7 +410,7 @@ function openImageLightbox(images: { url: string; alt: string }[], startIndex: n
   // chaque navigation : garde le même overlay/piège de focus, et permet de
   // rendre le focus au bouton précédent/suivant qui vient d'être activé
   // (focusTarget) plutôt qu'au bouton fermer par défaut.
-  function renderContent(focusTarget: "close" | "prev" | "next" = "close"): void {
+  function renderContent(focusTarget?: "prev" | "next"): void {
     const img = images[index];
     overlay.setAttribute("aria-label", img.alt);
     const hasMultiple = images.length > 1;
@@ -420,7 +420,7 @@ function openImageLightbox(images: { url: string; alt: string }[], startIndex: n
       <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt)}" class="image-lightbox-img" />
       ${hasMultiple ? `<button type="button" class="icon-btn image-lightbox-next" aria-label="Photo suivante">${icons.forward}</button>` : ""}
       ${hasMultiple ? `<span class="image-lightbox-counter">${index + 1} / ${images.length}</span>` : ""}`;
-    overlay.querySelector(".image-lightbox-close")?.addEventListener("click", close);
+    // Le bouton fermer n'a pas d'écouteur propre : son clic remonte à l'overlay.
     overlay.querySelector(".image-lightbox-prev")?.addEventListener("click", (e) => {
       e.stopPropagation();
       go(-1);
@@ -431,7 +431,8 @@ function openImageLightbox(images: { url: string; alt: string }[], startIndex: n
     });
     const focusSelector =
       focusTarget === "prev" ? ".image-lightbox-prev" : focusTarget === "next" ? ".image-lightbox-next" : ".image-lightbox-close";
-    (overlay.querySelector<HTMLElement>(focusSelector) ?? overlay.querySelector<HTMLElement>(".image-lightbox-close"))?.focus();
+    // prev/next n'existent que s'il y a plusieurs photos, seul cas où on y navigue.
+    overlay.querySelector<HTMLElement>(focusSelector)!.focus();
   }
 
   // Un clic n'importe où sur l'overlay referme (pas seulement le bouton
@@ -537,7 +538,7 @@ function mealCardHtml(meal: Meal, archived: boolean, expanded: boolean, code: st
                 <div class="meal-field">
                   <label class="meal-field-label" for="meal-planned-${escapeHtml(meal.id)}">Jour prévu</label>
                   <div class="meal-planned-date-row">
-                    <input type="date" id="meal-planned-${escapeHtml(meal.id)}" class="meal-planned-date" data-action="planned-date" value="${meal.plannedDate ? toDateInputValue(meal.plannedDate) : ""}" />
+                    <input type="date" id="meal-planned-${escapeHtml(meal.id)}" class="meal-planned-date" data-action="planned-date" ${meal.plannedDate ? `value="${toDateInputValue(meal.plannedDate)}"` : ""} />
                     ${
                       meal.plannedDate
                         ? `<button type="button" class="icon-btn" data-action="clear-planned-date" aria-label="Retirer le jour prévu">${icons.close}</button>`
@@ -602,13 +603,16 @@ function notFoundHtml(code: string): string {
     </div>`;
 }
 
-function layoutHtml(state: ListState, connected: boolean): string {
+// Le point de connexion démarre toujours hors-ligne : le gabarit n'est construit
+// qu'une fois, et toujours avant conn.connect() (voir mountListView) ;
+// updateConnDot() prend ensuite le relais.
+function layoutHtml(state: ListState): string {
   return `
     <div class="list-view">
       <header class="list-header">
         <button type="button" class="icon-btn" id="btn-home" aria-label="Retour à l'accueil">${icons.back}</button>
         <h1 id="list-title" role="button" tabindex="0">${escapeHtml(state.name)}</h1>
-        <span class="conn-dot" id="conn-dot" title="${connected ? "Synchronisé" : "Connexion…"}"></span>
+        <span class="conn-dot" id="conn-dot" title="Connexion…"></span>
         <button type="button" class="icon-btn" id="menu-toggle-btn" aria-label="Menu" aria-expanded="false">${icons.more}</button>
       </header>
       <div class="action-menu" id="action-menu" hidden>
@@ -684,10 +688,12 @@ function layoutHtml(state: ListState, connected: boolean): string {
 
 export function mountListView(root: HTMLElement, code: string, navigate: (path: string) => void): () => void {
   let state: ListState | null = getCachedListState(code);
-  let connected = false;
-  let loading = state === null;
+  // Seul l'état « aucune liste disponible » (state nul) affiche l'écran de
+  // chargement ou d'erreur (voir render()) : les valeurs initiales de ces deux
+  // drapeaux n'ont d'effet que dans ce cas.
+  let loading = true;
   let notFound = false;
-  let loadError = false;
+  let loadError: boolean | undefined;
   let shellMounted = false;
   let tab: "active" | "planning" | "archive" = "active";
   let archiveQuery = "";
@@ -707,6 +713,9 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   // qu'elle reste active.
   let sortByStatus = getSortByStatus();
   let sortable: Sortable | null = null;
+  // Écouteur de clic global du panneau de partage / menu (voir wireHeader),
+  // retiré au démontage de la vue.
+  let onDocumentClick: (() => void) | undefined;
   // Le temps d'un glissé (voir wireMealList) : évite qu'une mise à jour
   // reçue en direct ne reconstruise la liste sous les doigts de la personne
   // en train de réordonner. Le prochain envoi (celui du dépôt) redéclenche
@@ -731,7 +740,6 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   function onStateUpdate(next: ListState) {
     const previous = state;
     state = next;
-    loading = false;
     notFound = false;
     cacheListState(next);
     touchRecentList(next.code, next.name);
@@ -744,10 +752,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   }
 
   conn.onState(onStateUpdate);
-  conn.onConnectionChange((isConnected) => {
-    connected = isConnected;
-    updateConnDot();
-  });
+  conn.onConnectionChange(updateConnDot);
   conn.onError((message) => showToast(message));
 
   (async () => {
@@ -756,7 +761,6 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (!fetched) {
         if (!state) {
           notFound = true;
-          loading = false;
           render();
           return;
         }
@@ -766,7 +770,8 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         touchRecentList(fetched.code, fetched.name);
       }
     } catch {
-      loadError = state === null;
+      // Sans effet si une liste en cache est déjà affichée (voir render()).
+      loadError = true;
     }
     loading = false;
     render();
@@ -778,7 +783,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   function render(): void {
     if (notFound) {
       root.innerHTML = notFoundHtml(code);
-      root.querySelector("#btn-home")?.addEventListener("click", () => navigate("/"));
+      root.querySelector("#btn-home")!.addEventListener("click", () => navigate("/"));
       return;
     }
     if (loading && !state) {
@@ -787,17 +792,18 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     }
     if (loadError && !state) {
       root.innerHTML = `<div class="centered-message"><p>Impossible de charger la liste. Vérifie ta connexion.</p><button class="btn" id="retry">Réessayer</button></div>`;
-      root.querySelector("#retry")?.addEventListener("click", () => location.reload());
+      root.querySelector("#retry")!.addEventListener("click", () => location.reload());
       return;
     }
-    if (!state) return;
+    // Les trois branches ci-dessus couvrent tous les cas où state est nul
+    // (jamais réassigné à null une fois non-nul) : garanti non-nul ensuite.
 
     if (!shellMounted) {
       // Construit une seule fois : reconstruire à chaque mise à jour temps
       // réel effacerait ce que l'utilisateur est en train de saisir (titre
       // de la liste, formulaire d'ajout) si quelqu'un d'autre modifie la
       // liste pendant ce temps.
-      root.innerHTML = layoutHtml(state, connected);
+      root.innerHTML = layoutHtml(state!);
       wireHeader();
       wireAddForm();
       wireSearch();
@@ -816,13 +822,13 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   }
 
   function updateTitle(): void {
-    const titleEl = root.querySelector("#list-title") as HTMLElement | null;
-    if (!titleEl || !state) return;
+    // Appelée uniquement une fois le gabarit construit (voir render()).
+    const titleEl = root.querySelector("#list-title") as HTMLElement;
     if (titleEl.querySelector("input")) return; // édition en cours, ne pas écraser
-    if (titleEl.textContent !== state.name) titleEl.textContent = state.name;
+    titleEl.textContent = state!.name;
   }
 
-  function updateConnDot(): void {
+  function updateConnDot(connected: boolean): void {
     const dot = root.querySelector("#conn-dot");
     if (!dot) return;
     dot.classList.toggle("online", connected);
@@ -835,70 +841,60 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * restent ouverts après une action pour permettre plusieurs interactions
    * de suite (copier plusieurs champs, cocher plusieurs filtres). */
   function closeActionMenu(): void {
-    const menu = root.querySelector("#action-menu") as HTMLElement | null;
-    if (menu) menu.hidden = true;
-    root.querySelector("#menu-toggle-btn")?.setAttribute("aria-expanded", "false");
+    (root.querySelector("#action-menu") as HTMLElement).hidden = true;
+    root.querySelector("#menu-toggle-btn")!.setAttribute("aria-expanded", "false");
   }
 
   function wireHeader(): void {
-    root.querySelector("#btn-home")?.addEventListener("click", () => navigate("/"));
+    root.querySelector("#btn-home")!.addEventListener("click", () => navigate("/"));
 
-    const actionMenu = root.querySelector("#action-menu") as HTMLElement | null;
-    const menuToggleBtn = root.querySelector("#menu-toggle-btn") as HTMLButtonElement | null;
-    menuToggleBtn?.addEventListener("click", (e) => {
+    const actionMenu = root.querySelector("#action-menu") as HTMLElement;
+    const menuToggleBtn = root.querySelector("#menu-toggle-btn") as HTMLButtonElement;
+    menuToggleBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (!actionMenu) return;
       actionMenu.hidden = !actionMenu.hidden;
       menuToggleBtn.setAttribute("aria-expanded", String(!actionMenu.hidden));
     });
-    actionMenu?.addEventListener("click", (e) => e.stopPropagation());
+    actionMenu.addEventListener("click", (e) => e.stopPropagation());
 
-    const sharePanel = root.querySelector("#share-panel") as HTMLElement | null;
-    root.querySelector("#btn-share")?.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (sharePanel) sharePanel.hidden = !sharePanel.hidden;
+    const sharePanel = root.querySelector("#share-panel") as HTMLElement;
+    // Dans le menu d'actions, qui arrête déjà la propagation des clics.
+    root.querySelector("#btn-share")!.addEventListener("click", () => {
+      sharePanel.hidden = !sharePanel.hidden;
       closeActionMenu();
     });
-    document.addEventListener("click", () => {
-      if (sharePanel) sharePanel.hidden = true;
+    onDocumentClick = () => {
+      sharePanel.hidden = true;
       closeActionMenu();
-    });
-    sharePanel?.addEventListener("click", (e) => e.stopPropagation());
-    root.querySelector("#copy-name")?.addEventListener("click", () => {
-      if (state) copyToClipboard(state.name, "Nom copié.");
-    });
-    root.querySelector("#copy-code")?.addEventListener("click", () => {
-      if (state) copyToClipboard(state.code, "Code copié.");
-    });
-    root.querySelector("#copy-link")?.addEventListener("click", () => {
-      if (state) copyToClipboard(shareUrl(state.code), "Lien copié.");
+    };
+    document.addEventListener("click", onDocumentClick);
+    sharePanel.addEventListener("click", (e) => e.stopPropagation());
+    root.querySelector("#copy-name")!.addEventListener("click", () => copyToClipboard(state!.name, "Nom copié."));
+    root.querySelector("#copy-code")!.addEventListener("click", () => copyToClipboard(state!.code, "Code copié."));
+    root.querySelector("#copy-link")!.addEventListener("click", () => copyToClipboard(shareUrl(state!.code), "Lien copié."));
+
+    const qrWrap = root.querySelector("#qr-wrap") as HTMLElement;
+    renderQrSvg(shareUrl(state!.code)).then((svg) => {
+      qrWrap.innerHTML = svg;
     });
 
-    if (state) {
-      const qrWrap = root.querySelector("#qr-wrap") as HTMLElement | null;
-      renderQrSvg(shareUrl(state.code)).then((svg) => {
-        if (qrWrap) qrWrap.innerHTML = svg;
-      });
-    }
+    root.querySelector("#btn-snapshot-link")!.addEventListener("click", () => void generateSnapshotShare());
 
-    root.querySelector("#btn-snapshot-link")?.addEventListener("click", () => void generateSnapshotShare());
-
-    root.querySelector("#btn-export")?.addEventListener("click", () => {
-      if (state) exportListState(state);
+    root.querySelector("#btn-export")!.addEventListener("click", () => {
+      exportListState(state!);
       closeActionMenu();
     });
-    const importInput = root.querySelector<HTMLInputElement>("#import-file-input");
-    root.querySelector("#btn-import")?.addEventListener("click", () => {
-      importInput?.click();
+    const importInput = root.querySelector<HTMLInputElement>("#import-file-input")!;
+    root.querySelector("#btn-import")!.addEventListener("click", () => {
+      importInput.click();
       closeActionMenu();
     });
-    importInput?.addEventListener("change", async () => {
-      const file = importInput.files?.[0];
+    importInput.addEventListener("change", async () => {
+      const file = importInput.files![0];
       importInput.value = "";
       if (!file) return;
       try {
         openImportModal(await parseImportFile(file), (mode, data) => {
-          markOwnMutation([...data.meals, ...data.archive].map((m) => m.id));
           conn.send({ type: "importState", mode, data });
         });
       } catch (err) {
@@ -906,40 +902,34 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       }
     });
 
-    const titleEl = root.querySelector("#list-title") as HTMLElement | null;
-    if (titleEl) {
-      onActivate(titleEl, () => {
-        if (!state) return;
-        const previousName = state.name;
-        startEdit(titleEl, {
-          value: state.name,
-          maxLength: MAX_LIST_NAME_LENGTH,
-          onCommit: (value) => {
-            if (!value) {
-              render();
-              return;
-            }
-            conn.send({ type: "renameList", name: value });
-            if (value !== previousName) {
-              showUndoToast("Nom de la liste modifié.", () => conn.send({ type: "renameList", name: previousName }));
-            }
-          },
-        });
+    const titleEl = root.querySelector("#list-title") as HTMLElement;
+    onActivate(titleEl, () => {
+      const previousName = state!.name;
+      startEdit(titleEl, {
+        value: previousName,
+        maxLength: MAX_LIST_NAME_LENGTH,
+        onCommit: (value) => {
+          // Remplace tout de suite le champ par le texte : updateTitle()
+          // ignore un titre en cours d'édition, donc le prochain rendu ne
+          // le ferait pas.
+          titleEl.textContent = value || previousName;
+          if (!value) return;
+          conn.send({ type: "renameList", name: value });
+          if (value !== previousName) {
+            showUndoToast("Nom de la liste modifié.", () => conn.send({ type: "renameList", name: previousName }));
+          }
+        },
       });
-    }
+    });
   }
 
   function activateTab(next: "active" | "planning" | "archive"): void {
     tab = next;
     root.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tab === tab)));
-    const addCard = root.querySelector("#add-meal-card") as HTMLElement | null;
-    if (addCard) addCard.hidden = tab !== "active";
-    const searchCard = root.querySelector("#search-card") as HTMLElement | null;
-    if (searchCard) searchCard.hidden = tab !== "archive";
-    const mealListEl = root.querySelector("#meal-list") as HTMLElement | null;
-    if (mealListEl) mealListEl.hidden = tab === "planning";
-    const planningView = root.querySelector("#planning-view") as HTMLElement | null;
-    if (planningView) planningView.hidden = tab !== "planning";
+    (root.querySelector("#add-meal-card") as HTMLElement).hidden = tab !== "active";
+    (root.querySelector("#search-card") as HTMLElement).hidden = tab !== "archive";
+    (root.querySelector("#meal-list") as HTMLElement).hidden = tab === "planning";
+    (root.querySelector("#planning-view") as HTMLElement).hidden = tab !== "planning";
     updateSortToggleBtn();
     updateFilterToggleBtn();
     renderMeals();
@@ -955,8 +945,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * liste active : masqué sur l'historique, dont l'ordre suit toujours la
    * date d'archivage. */
   function updateSortToggleBtn(): void {
-    const btn = root.querySelector("#sort-toggle-btn") as HTMLButtonElement | null;
-    if (!btn) return;
+    const btn = root.querySelector("#sort-toggle-btn") as HTMLButtonElement;
     btn.hidden = tab !== "active";
     btn.setAttribute("aria-pressed", String(sortByStatus));
     btn.textContent = sortByStatus ? "Tri manuel" : "Trier par statut";
@@ -968,31 +957,28 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * visible pour le rouvrir/refermer ailleurs, il resterait sinon affiché
    * hors de propos sur l'historique ou le planning. */
   function updateFilterToggleBtn(): void {
-    const btn = root.querySelector("#filter-toggle-btn") as HTMLButtonElement | null;
-    if (!btn) return;
+    const btn = root.querySelector("#filter-toggle-btn") as HTMLButtonElement;
     btn.hidden = tab !== "active";
     if (tab !== "active") {
-      const panel = root.querySelector("#filter-panel") as HTMLElement | null;
-      if (panel) panel.hidden = true;
+      (root.querySelector("#filter-panel") as HTMLElement).hidden = true;
       btn.setAttribute("aria-pressed", "false");
     }
   }
 
   function wireSearch(): void {
-    root.querySelector("#archive-search")?.addEventListener("input", (e) => {
+    root.querySelector("#archive-search")!.addEventListener("input", (e) => {
       archiveQuery = (e.target as HTMLInputElement).value;
       renderMeals();
     });
   }
 
   function wireStats(): void {
-    const toggleBtn = root.querySelector("#stats-toggle-btn") as HTMLButtonElement | null;
-    const panel = root.querySelector("#stats-panel") as HTMLElement | null;
-    toggleBtn?.addEventListener("click", () => {
-      if (!panel) return;
+    const toggleBtn = root.querySelector("#stats-toggle-btn") as HTMLButtonElement;
+    const panel = root.querySelector("#stats-panel") as HTMLElement;
+    toggleBtn.addEventListener("click", () => {
       panel.hidden = !panel.hidden;
       toggleBtn.setAttribute("aria-pressed", String(!panel.hidden));
-      if (!panel.hidden) updateStatsPanel();
+      updateStatsPanel();
     });
   }
 
@@ -1001,9 +987,9 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * compris quand un autre appareil archive un repas pendant que le panneau
    * est ouvert. Inutile tant qu'il est masqué. */
   function updateStatsPanel(): void {
-    const panel = root.querySelector("#stats-panel") as HTMLElement | null;
-    if (!panel || panel.hidden || !state) return;
-    panel.innerHTML = historyStatsHtml(state.archive);
+    const panel = root.querySelector("#stats-panel") as HTMLElement;
+    if (panel.hidden) return;
+    panel.innerHTML = historyStatsHtml(state!.archive);
   }
 
   /** Filtres de la liste active (statut, temps de préparation) : multi-
@@ -1011,59 +997,53 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * contrairement au tri par statut (sortByStatus), rien n'est envoyé au
    * serveur. */
   function wireFilters(): void {
-    const toggleBtn = root.querySelector("#filter-toggle-btn") as HTMLButtonElement | null;
-    const panel = root.querySelector("#filter-panel") as HTMLElement | null;
-    toggleBtn?.addEventListener("click", () => {
-      if (!panel) return;
+    const toggleBtn = root.querySelector("#filter-toggle-btn") as HTMLButtonElement;
+    const panel = root.querySelector("#filter-panel") as HTMLElement;
+    toggleBtn.addEventListener("click", () => {
       panel.hidden = !panel.hidden;
       toggleBtn.setAttribute("aria-pressed", String(!panel.hidden));
       closeActionMenu();
     });
-    root.querySelector("#filter-reset-btn")?.addEventListener("click", () => {
+    root.querySelector("#filter-reset-btn")!.addEventListener("click", () => {
       activeStatusFilters.clear();
       activePrepTimeFilters.clear();
       renderFilterPickers();
       renderMeals();
     });
     renderFilterPickers();
-    updateFilterToggleBtn();
   }
 
   function renderFilterPickers(): void {
-    const statusEl = root.querySelector("#filter-status-pills") as HTMLElement | null;
-    if (statusEl) {
-      statusEl.innerHTML = filterStatusPickerHtml(activeStatusFilters);
-      statusEl.querySelectorAll<HTMLButtonElement>(".filter-status-pill").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const status = btn.dataset.status as MealStatus;
-          if (activeStatusFilters.has(status)) activeStatusFilters.delete(status);
-          else activeStatusFilters.add(status);
-          renderFilterPickers();
-          renderMeals();
-        });
+    const statusEl = root.querySelector("#filter-status-pills") as HTMLElement;
+    statusEl.innerHTML = filterStatusPickerHtml(activeStatusFilters);
+    statusEl.querySelectorAll<HTMLButtonElement>(".filter-status-pill").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const status = btn.dataset.status as MealStatus;
+        if (activeStatusFilters.has(status)) activeStatusFilters.delete(status);
+        else activeStatusFilters.add(status);
+        renderFilterPickers();
+        renderMeals();
       });
-    }
-    const prepEl = root.querySelector("#filter-preptime-pills") as HTMLElement | null;
-    if (prepEl) {
-      prepEl.innerHTML = filterPrepTimePickerHtml(activePrepTimeFilters);
-      prepEl.querySelectorAll<HTMLButtonElement>(".filter-preptime-pill").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const prepTime = btn.dataset.preptime as PrepTime;
-          if (activePrepTimeFilters.has(prepTime)) activePrepTimeFilters.delete(prepTime);
-          else activePrepTimeFilters.add(prepTime);
-          renderFilterPickers();
-          renderMeals();
-        });
+    });
+    const prepEl = root.querySelector("#filter-preptime-pills") as HTMLElement;
+    prepEl.innerHTML = filterPrepTimePickerHtml(activePrepTimeFilters);
+    prepEl.querySelectorAll<HTMLButtonElement>(".filter-preptime-pill").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const prepTime = btn.dataset.preptime as PrepTime;
+        if (activePrepTimeFilters.has(prepTime)) activePrepTimeFilters.delete(prepTime);
+        else activePrepTimeFilters.add(prepTime);
+        renderFilterPickers();
+        renderMeals();
       });
-    }
-    const resetBtn = root.querySelector("#filter-reset-btn") as HTMLButtonElement | null;
-    if (resetBtn) resetBtn.hidden = activeStatusFilters.size === 0 && activePrepTimeFilters.size === 0;
+    });
+    (root.querySelector("#filter-reset-btn") as HTMLButtonElement).hidden = activeStatusFilters.size === 0 && activePrepTimeFilters.size === 0;
   }
 
   function wireToolbar(): void {
-    root.querySelector("#toggle-all-btn")?.addEventListener("click", () => {
+    root.querySelector("#toggle-all-btn")!.addEventListener("click", () => {
       const meals = visibleMeals();
-      const allExpanded = meals.length > 0 && meals.every((m) => expandedIds.has(m.id));
+      // Liste vide : every() vaut vrai, mais il n'y a alors rien à (dé)plier.
+      const allExpanded = meals.every((m) => expandedIds.has(m.id));
       for (const m of meals) {
         if (allExpanded) expandedIds.delete(m.id);
         else expandedIds.add(m.id);
@@ -1072,11 +1052,11 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       closeActionMenu();
     });
 
-    root.querySelector("#sort-toggle-btn")?.addEventListener("click", () => {
+    root.querySelector("#sort-toggle-btn")!.addEventListener("click", () => {
       sortByStatus = !sortByStatus;
       setSortByStatus(sortByStatus);
       updateSortToggleBtn();
-      sortable?.option("disabled", sortByStatus);
+      sortable!.option("disabled", sortByStatus);
       renderMeals();
       closeActionMenu();
     });
@@ -1093,8 +1073,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   }
 
   function updateNotifToggleBtn(): void {
-    const btn = root.querySelector("#notif-toggle-btn") as HTMLButtonElement | null;
-    if (!btn) return;
+    const btn = root.querySelector("#notif-toggle-btn") as HTMLButtonElement;
     if (typeof Notification === "undefined") {
       btn.hidden = true;
       return;
@@ -1117,9 +1096,9 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * notification push, rien ne réveille l'appareil si l'onglet est fermé —
    * voir notifyStateChanges/diffForNotifications. */
   function wireNotificationToggle(): void {
-    const btn = root.querySelector("#notif-toggle-btn") as HTMLButtonElement | null;
-    btn?.addEventListener("click", async (e) => {
-      e.stopPropagation();
+    const btn = root.querySelector("#notif-toggle-btn") as HTMLButtonElement;
+    // Dans le menu d'actions, qui arrête déjà la propagation des clics.
+    btn.addEventListener("click", async () => {
       if (typeof Notification === "undefined") return;
       if (notificationsActive()) {
         setNotificationPreference(false);
@@ -1160,11 +1139,12 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   async function showBrowserNotification(title: string, body: string): Promise<void> {
     const options: NotificationOptions = { body, icon: appPath("/icon-192.png"), tag: `${code}-activity` };
     try {
-      const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
-      if (registration) {
-        await registration.showNotification(title, options);
-        return;
-      }
+      // Sans service worker (ou API absente) : registration vaut undefined et
+      // l'appel lève, d'où le même repli que pour un échec.
+      // `serviceWorker` absent : l'accès lève aussi, d'où le même repli.
+      const registration = await navigator.serviceWorker.getRegistration();
+      await registration!.showNotification(title, options);
+      return;
     } catch {
       // tombe sur le fallback ci-dessous
     }
@@ -1196,8 +1176,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * nœuds), et le prochain état renvoyé par le serveur confirme (ou
    * corrige) l'affichage, comme pour le reste de l'app. */
   function wireMealList(): void {
-    const listEl = root.querySelector("#meal-list") as HTMLElement | null;
-    if (!listEl) return;
+    const listEl = root.querySelector("#meal-list") as HTMLElement;
     // Pas d'animation de repositionnement en mode accessibilité (voir
     // src/lib/a11y.ts) ni si le système demande de réduire les animations :
     // SortableJS n'a pas d'option "prefers-reduced-motion" native, donc on
@@ -1230,7 +1209,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
         const droppedLater = Array.from(listEl.children)
           .slice(0, Array.from(listEl.children).indexOf(item))
           .some((el) => (el as HTMLElement).dataset.section === "later");
-        const meal = state?.meals.find((m) => m.id === item.dataset.id);
+        const meal = state!.meals.find((m) => m.id === item.dataset.id);
         if (meal && isLater(meal) !== droppedLater) conn.send({ type: "setMealLater", id: meal.id, later: droppedLater });
         const orderedIds = Array.from(listEl.querySelectorAll<HTMLLIElement>(".meal-card")).map((li) => li.dataset.id!);
         conn.send({ type: "reorderMeals", orderedIds });
@@ -1240,10 +1219,9 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
 
   function wireAddForm(): void {
     const input = root.querySelector("#add-title") as HTMLInputElement;
-    const suggestionsEl = root.querySelector("#add-suggestions") as HTMLElement | null;
+    const suggestionsEl = root.querySelector("#add-suggestions") as HTMLElement;
 
     function hideSuggestions(): void {
-      if (!suggestionsEl) return;
       suggestionsEl.hidden = true;
       suggestionsEl.innerHTML = "";
     }
@@ -1253,7 +1231,6 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     // note/son commentaire d'origine (comme "Remettre dans la liste"),
     // plutôt que de créer un nouveau repas vierge du même nom.
     function renderSuggestions(): void {
-      if (!suggestionsEl || !state) return;
       const query = input.value.trim().toLowerCase();
       if (!query) {
         hideSuggestions();
@@ -1261,7 +1238,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       }
       const seenTitles = new Set<string>();
       const matches: Meal[] = [];
-      for (const meal of state.archive) {
+      for (const meal of state!.archive) {
         const key = meal.title.toLowerCase();
         if (!key.includes(query) || seenTitles.has(key)) continue;
         seenTitles.add(key);
@@ -1303,7 +1280,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       if (e.key === "Escape") hideSuggestions();
     });
 
-    root.querySelector("#add-form")?.addEventListener("submit", (e) => {
+    root.querySelector("#add-form")!.addEventListener("submit", (e) => {
       e.preventDefault();
       const title = input.value.trim();
       if (!title) return;
@@ -1330,22 +1307,17 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * (voir mountHomeView, qui propose d'en créer une nouvelle à partir de cet
    * instantané). */
   async function generateSnapshotShare(): Promise<void> {
-    if (!state) return;
-    const payload: ImportPayload = { name: state.name, meals: state.meals, archive: state.archive };
+    const payload: ImportPayload = { name: state!.name, meals: state!.meals, archive: state!.archive };
     const url = new URL(`${location.origin}${appPath("/")}`);
     url.searchParams.set("import", encodeSnapshotToParam(payload));
-    const qrWrap = root.querySelector("#snapshot-qr-wrap") as HTMLElement | null;
-    const copyBtn = root.querySelector<HTMLButtonElement>("#copy-snapshot-link");
+    const qrWrap = root.querySelector("#snapshot-qr-wrap") as HTMLElement;
+    const copyBtn = root.querySelector<HTMLButtonElement>("#copy-snapshot-link")!;
     try {
       const svg = await renderQrSvg(url.toString());
-      if (qrWrap) {
-        qrWrap.innerHTML = svg;
-        qrWrap.hidden = false;
-      }
-      if (copyBtn) {
-        copyBtn.hidden = false;
-        copyBtn.onclick = () => copyToClipboard(url.toString(), "Lien figé copié.");
-      }
+      qrWrap.innerHTML = svg;
+      qrWrap.hidden = false;
+      copyBtn.hidden = false;
+      copyBtn.onclick = () => copyToClipboard(url.toString(), "Lien figé copié.");
     } catch {
       showToast("Liste trop volumineuse pour un lien/QR figé — utilise plutôt l'export JSON.");
     }
@@ -1372,7 +1344,6 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       return;
     }
     openImportModal(data, (mode, imported) => {
-      markOwnMutation([...imported.meals, ...imported.archive].map((m) => m.id));
       conn.send({ type: "importState", mode, data: imported });
     });
   }
@@ -1383,15 +1354,13 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * (glisser-déposer), soit un tri automatique par statut (voir
    * sortByStatus) — au choix, jamais les deux à la fois. */
   function visibleMeals(): Meal[] {
-    if (!state) return [];
-    if (tab === "planning") return [];
     const query = archiveQuery.trim().toLowerCase();
     if (tab === "archive") {
-      return query ? state.archive.filter((m) => m.title.toLowerCase().includes(query)) : state.archive;
+      return query ? state!.archive.filter((m) => m.title.toLowerCase().includes(query)) : state!.archive;
     }
-    let meals = state.meals;
+    let meals = state!.meals;
     if (activeStatusFilters.size > 0) meals = meals.filter((m) => activeStatusFilters.has(m.status));
-    if (activePrepTimeFilters.size > 0) meals = meals.filter((m) => m.prepTime !== null && activePrepTimeFilters.has(m.prepTime));
+    if (activePrepTimeFilters.size > 0) meals = meals.filter((m) => activePrepTimeFilters.has(m.prepTime!));
     const sorted = sortByStatus
       ? [...meals].sort((a, b) => MEAL_STATUSES.indexOf(a.status) - MEAL_STATUSES.indexOf(b.status) || a.order - b.order)
       : [...meals].sort((a, b) => a.order - b.order);
@@ -1402,34 +1371,29 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
   }
 
   function renderMeals(): void {
-    if (!state) return;
-
     if (tab === "planning") {
-      const emptyEl = root.querySelector("#empty-message") as HTMLElement | null;
-      if (emptyEl) emptyEl.hidden = true;
-      const toggleAllBtn = root.querySelector("#toggle-all-btn") as HTMLButtonElement | null;
-      if (toggleAllBtn) toggleAllBtn.hidden = true;
+      (root.querySelector("#empty-message") as HTMLElement).hidden = true;
+      (root.querySelector("#toggle-all-btn") as HTMLButtonElement).hidden = true;
       renderPlanning();
       return;
     }
 
     if (dragging) return;
-    const listEl = root.querySelector("#meal-list") as HTMLElement | null;
-    const emptyEl = root.querySelector("#empty-message") as HTMLElement | null;
-    if (!listEl || !emptyEl) return;
+    const listEl = root.querySelector("#meal-list") as HTMLElement;
+    const emptyEl = root.querySelector("#empty-message") as HTMLElement;
 
     const meals = visibleMeals();
-    const query = archiveQuery.trim().toLowerCase();
+    const hasQuery = archiveQuery.trim() !== "";
 
     if (meals.length === 0) {
       listEl.innerHTML = "";
       emptyEl.hidden = false;
       emptyEl.textContent =
         tab === "active"
-          ? state.meals.length === 0
+          ? state!.meals.length === 0
             ? "Aucun repas pour l'instant. Ajoute une idée ci-dessus !"
             : "Aucun repas ne correspond aux filtres."
-          : query
+          : hasQuery
             ? "Aucun repas ne correspond à la recherche."
             : "Aucun repas dans l'historique pour le moment.";
     } else {
@@ -1437,37 +1401,33 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       reconcileMealList(listEl, meals);
     }
 
-    const toggleAllBtn = root.querySelector("#toggle-all-btn") as HTMLButtonElement | null;
-    if (toggleAllBtn) {
-      toggleAllBtn.hidden = meals.length === 0;
-      const allExpanded = meals.length > 0 && meals.every((m) => expandedIds.has(m.id));
-      toggleAllBtn.textContent = allExpanded ? "Tout replier" : "Tout déplier";
-    }
+    const toggleAllBtn = root.querySelector("#toggle-all-btn") as HTMLButtonElement;
+    toggleAllBtn.hidden = meals.length === 0;
+    const allExpanded = meals.length > 0 && meals.every((m) => expandedIds.has(m.id));
+    toggleAllBtn.textContent = allExpanded ? "Tout replier" : "Tout déplier";
 
     if (tab === "archive") updateStatsPanel();
   }
 
   function renderPlanning(): void {
-    const container = root.querySelector("#planning-view") as HTMLElement | null;
-    if (!container || !state) return;
-    container.innerHTML = planningHtml(state.meals, weekStart);
-    container.querySelector("#planning-prev")?.addEventListener("click", () => {
+    const container = root.querySelector("#planning-view") as HTMLElement;
+    container.innerHTML = planningHtml(state!.meals, weekStart);
+    container.querySelector("#planning-prev")!.addEventListener("click", () => {
       weekStart = addDays(weekStart, -7);
       renderPlanning();
     });
-    container.querySelector("#planning-next")?.addEventListener("click", () => {
+    container.querySelector("#planning-next")!.addEventListener("click", () => {
       weekStart = addDays(weekStart, 7);
       renderPlanning();
     });
-    container.querySelector("#planning-today-btn")?.addEventListener("click", () => {
+    container.querySelector("#planning-today-btn")!.addEventListener("click", () => {
       weekStart = startOfWeek(Date.now());
       renderPlanning();
     });
     container.querySelectorAll<HTMLButtonElement>('[data-action="unplan"]').forEach((btn) => {
       btn.addEventListener("click", () => {
-        const li = btn.closest<HTMLLIElement>(".planning-entry");
-        const id = li?.dataset.id;
-        if (id) conn.send({ type: "setMealPlannedDate", id, plannedDate: null });
+        const id = btn.closest<HTMLLIElement>(".planning-entry")!.dataset.id!;
+        conn.send({ type: "setMealPlannedDate", id, plannedDate: null });
       });
     });
   }
@@ -1476,11 +1436,11 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * commentaire) a le focus dans `listEl`, s'il y en a un. Un simple bouton
    * ayant le focus (ex: juste après un clic sur le chevron) ne compte pas :
    * lui seul régénère volontairement sa carte pour refléter le nouvel état. */
-  function focusedMealId(listEl: HTMLElement): string | null {
+  function focusedMealId(): string | null {
     const active = document.activeElement;
     if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) return null;
     const card = active.closest<HTMLElement>(".meal-card");
-    return card && listEl.contains(card) ? (card.dataset.id ?? null) : null;
+    return card ? card.dataset.id! : null;
   }
 
   /** Reconstruit la liste en réutilisant chaque carte dont le contenu affiché
@@ -1496,10 +1456,10 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
    * non encore validée (le nœud DOM de l'input/textarea serait détruit et
    * recréé avec l'ancienne valeur venue du serveur). */
   function reconcileMealList(listEl: HTMLElement, meals: Meal[]): void {
-    const frozenId = focusedMealId(listEl);
+    const frozenId = focusedMealId();
     const existingById = new Map<string, HTMLLIElement>();
     listEl.querySelectorAll<HTMLLIElement>(".meal-card").forEach((li) => {
-      if (li.dataset.id) existingById.set(li.dataset.id, li);
+      existingById.set(li.dataset.id!, li);
     });
 
     const reorderable = tab === "active" && !sortByStatus;
@@ -1522,17 +1482,20 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     // quand une section est vide, pour pouvoir y déposer une carte au glissé.
     const laterCount = meals.filter((m) => isLater(m)).length;
     const weekCount = meals.length - laterCount;
+    const weekCards: HTMLLIElement[] = [];
+    const laterCards: HTMLLIElement[] = [];
+    cards.forEach((c, i) => (isLater(meals[i]) ? laterCards : weekCards).push(c));
     listEl.replaceChildren(
       elementFromHtml(sectionHeaderHtml(false, weekCount)),
-      ...cards.slice(0, weekCount),
+      ...weekCards,
       elementFromHtml(sectionHeaderHtml(true, laterCount)),
-      ...cards.slice(weekCount),
+      ...laterCards,
     );
   }
 
   function elementFromHtml(html: string): HTMLLIElement {
     const template = document.createElement("template");
-    template.innerHTML = html.trim();
+    template.innerHTML = html;
     return template.content.firstElementChild as HTMLLIElement;
   }
 
@@ -1545,38 +1508,36 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       renderMeals();
     }
 
-    card.querySelector<HTMLButtonElement>('[data-action="toggle"]')?.addEventListener("click", toggleExpanded);
+    card.querySelector<HTMLButtonElement>('[data-action="toggle"]')!.addEventListener("click", toggleExpanded);
 
     // Élargit la zone cliquable pour déplier/replier au-delà du seul bouton
     // chevron (poignée de glissé, titre éditable et boutons d'action gardent
     // leur propre comportement, donc exclus ici — et le bouton chevron a
     // déjà son propre écouteur juste au-dessus, à ne pas déclencher deux fois).
-    card.querySelector<HTMLElement>('[data-action="toggle-row"]')?.addEventListener("click", (e) => {
+    card.querySelector<HTMLElement>('[data-action="toggle-row"]')!.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
       if (target.closest(".drag-handle, .meal-controls, .meal-toggle, [data-action='edit-title']")) return;
       toggleExpanded();
     });
 
-    const titleEl = card.querySelector<HTMLElement>('[data-action="edit-title"]');
-    if (titleEl) {
-      onActivate(titleEl, () => {
-        const previousTitle = meal.title;
-        startEdit(titleEl, {
-          value: meal.title,
-          maxLength: MAX_TITLE_LENGTH,
-          onCommit: (value) => {
-            if (!value) {
-              render();
-              return;
-            }
-            conn.send({ type: "updateMeal", id, title: value });
-            if (value !== previousTitle) {
-              showUndoToast("Titre modifié.", () => conn.send({ type: "updateMeal", id, title: previousTitle }));
-            }
-          },
-        });
+    const titleEl = card.querySelector<HTMLElement>('[data-action="edit-title"]')!;
+    onActivate(titleEl, () => {
+      const previousTitle = meal.title;
+      startEdit(titleEl, {
+        value: meal.title,
+        maxLength: MAX_TITLE_LENGTH,
+        onCommit: (value) => {
+          // Remplace tout de suite le champ par le texte : la carte inchangée
+          // serait sinon réutilisée telle quelle par le prochain rendu.
+          titleEl.textContent = value || previousTitle;
+          if (!value) return;
+          conn.send({ type: "updateMeal", id, title: value });
+          if (value !== previousTitle) {
+            showUndoToast("Titre modifié.", () => conn.send({ type: "updateMeal", id, title: previousTitle }));
+          }
+        },
       });
-    }
+    });
 
     const sourceEl = card.querySelector<HTMLElement>('[data-action="edit-source"]');
     if (sourceEl) {
@@ -1596,7 +1557,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       });
     }
 
-    card.querySelector<HTMLButtonElement>('[data-action="copy-title"]')?.addEventListener("click", () => {
+    card.querySelector<HTMLButtonElement>('[data-action="copy-title"]')!.addEventListener("click", () => {
       copyToClipboard(meal.title, "Titre copié.");
     });
 
@@ -1646,7 +1607,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
           // le blur n'ait eu le temps de synchroniser) : la modale doit
           // toujours proposer ce qui est effectivement affiché.
           const commentEl = card.querySelector<HTMLTextAreaElement>('[data-field="comment"]');
-          const mealForModal = commentEl ? { ...meal, comment: commentEl.value } : meal;
+          const mealForModal = { ...meal, comment: commentEl!.value };
           openMarkDoneModal(mealForModal, (note, comment, doneAt) => {
             markOwnMutation([id]);
             conn.send({ type: "updateMeal", id, comment });
@@ -1753,10 +1714,10 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
 
     const input = card.querySelector<HTMLInputElement>('[data-action="image-input"]');
     card.querySelector<HTMLButtonElement>('[data-action="add-image"]')?.addEventListener("click", () => {
-      input?.click();
+      input!.click();
     });
     input?.addEventListener("change", () => {
-      const file = input.files?.[0];
+      const file = input.files![0];
       if (file) send(file);
       input.value = "";
     });
@@ -1767,8 +1728,7 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
           url: mealImageUrl(code, id, imageId),
           alt: `Photo de « ${meal.title} »`,
         }));
-        const startIndex = meal.images.indexOf(btn.dataset.imageId ?? "");
-        openImageLightbox(images, startIndex === -1 ? 0 : startIndex);
+        openImageLightbox(images, meal.images.indexOf(btn.dataset.imageId!));
       });
     });
 
@@ -1806,13 +1766,11 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
     });
   }
 
-  let toastTimer: ReturnType<typeof setTimeout> | null = null;
   function showToast(message: string): void {
     showUndoToast(message, null);
   }
 
   function showUndoToast(message: string, onUndo: (() => void) | null): void {
-    if (toastTimer) clearTimeout(toastTimer);
     document.getElementById("list-toast")?.remove();
     const el = document.createElement("div");
     el.id = "list-toast";
@@ -1832,11 +1790,14 @@ export function mountListView(root: HTMLElement, code: string, navigate: (path: 
       el.appendChild(btn);
     }
     document.body.appendChild(el);
-    toastTimer = setTimeout(() => el.remove(), 5000);
+    // Le minuteur d'un ancien message ne retire que l'ancien élément (déjà
+    // remplacé ci-dessus) : inutile de l'annuler.
+    setTimeout(() => el.remove(), 5000);
   }
 
   return () => {
     conn.disconnect();
+    document.removeEventListener("click", onDocumentClick!);
     document.getElementById("list-toast")?.remove();
   };
 }
