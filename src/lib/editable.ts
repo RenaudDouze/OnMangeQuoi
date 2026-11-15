@@ -27,6 +27,10 @@ export function startEdit(el: HTMLElement, opts: EditableOptions): void {
   };
 
   input.addEventListener("keydown", (ke) => {
+    // Les touches saisies ne doivent pas remonter jusqu'à l'élément éditable
+    // (onActivate) : Entrée y relancerait une édition une fois le champ
+    // remplacé par le texte, et Espace y serait bloqué par preventDefault.
+    ke.stopPropagation();
     if (ke.key === "Enter") {
       ke.preventDefault();
       input.blur();
