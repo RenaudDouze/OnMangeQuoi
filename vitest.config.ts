@@ -15,19 +15,15 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "lcov"],
-      // Comme dans KoiKiManke : seule la logique pure (reducer.ts, shared/)
-      // est unit-testée. worker/mealRoom.ts (stockage, WebSocket) n'est
-      // qu'une fine couche Durable Object sans logique propre — toute sa
-      // logique métier vit dans reducer.ts, entièrement testé.
-      // src/lib/compactShare.ts (encodage/décodage du lien/QR figé) et
-      // src/lib/notificationDiff.ts (quels changements méritent une
-      // notification, voir wireNotifications dans src/views/list.ts) sont
-      // pure logique elles aussi (pas de DOM), donc unit-testées comme
-      // reducer.ts — contrairement à src/lib/importExport.ts (Blob/document/
-      // File), qui reste couverte par l'e2e comme le reste de src/ (voir
-      // CLAUDE.md).
-      include: ["shared/**/*.ts", "worker/reducer.ts", "src/lib/compactShare.ts", "src/lib/notificationDiff.ts"],
-      exclude: ["**/*.test.ts", "shared/types.ts"],
+      // Tout shared/, worker/ et src/ (logique pure sous node, vues et
+      // composants DOM sous jsdom : chaque fichier de test déclare son
+      // environnement via `@vitest-environment`). Exclus : shared/types.ts
+      // (types seuls) et worker/mealRoom.ts (couche Durable Object — stockage,
+      // WebSocket — qui demanderait un vrai runtime Workers pour être testée
+      // utilement ; exercée par les tests e2e, toute sa logique métier vivant
+      // dans reducer.ts, entièrement testé).
+      include: ["shared/**/*.ts", "worker/**/*.ts", "src/**/*.ts"],
+      exclude: ["**/*.test.ts", "shared/types.ts", "worker/mealRoom.ts", "worker/test/**"],
       thresholds: {
         lines: 100,
         branches: 100,

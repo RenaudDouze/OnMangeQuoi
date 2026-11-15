@@ -41,7 +41,8 @@ export function trapFocus(container: HTMLElement, previouslyFocused: Element | n
   function onKeydown(e: KeyboardEvent): void {
     if (e.key !== "Tab") return;
     const items = focusable();
-    if (items.length === 0) return;
+    // Liste vide : first/last valent undefined, aucune des comparaisons
+    // ci-dessous ne peut être vraie — rien à piéger.
     const first = items[0];
     const last = items[items.length - 1];
     if (e.shiftKey && document.activeElement === first) {

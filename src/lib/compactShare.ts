@@ -63,8 +63,8 @@ function fromCompact(raw: Partial<CompactMeal>): Meal {
   return {
     id: "",
     title: typeof raw.t === "string" ? raw.t.slice(0, MAX_TITLE_LENGTH) : "",
-    status: typeof raw.s === "string" && (MEAL_STATUSES as string[]).includes(raw.s) ? raw.s : "idee",
-    note: typeof raw.n === "string" && (MEAL_NOTES as string[]).includes(raw.n) ? raw.n : null,
+    status: (MEAL_STATUSES as string[]).includes(raw.s as string) ? raw.s! : "idee",
+    note: (MEAL_NOTES as string[]).includes(raw.n as string) ? raw.n! : null,
     source: typeof raw.o === "string" ? raw.o.slice(0, MAX_SOURCE_LENGTH) : "",
     comment: typeof raw.c === "string" ? raw.c.slice(0, MAX_COMMENT_LENGTH) : "",
     order: 0,
@@ -72,7 +72,7 @@ function fromCompact(raw: Partial<CompactMeal>): Meal {
     updatedAt: typeof raw.u === "number" ? raw.u : Date.now(),
     doneAt: typeof raw.d === "number" ? raw.d : null,
     images: [],
-    prepTime: typeof raw.p === "string" && (PREP_TIMES as string[]).includes(raw.p) ? raw.p : null,
+    prepTime: (PREP_TIMES as string[]).includes(raw.p as string) ? raw.p! : null,
     plannedDate: typeof raw.pd === "number" ? raw.pd : null,
     later: raw.l === 1,
   };
@@ -93,12 +93,12 @@ export function encodeSnapshotToParam(payload: ImportPayload): string {
 /** `null` si le paramètre est manquant, invalide, ou ne correspond pas à
  * l'instantané attendu (lien corrompu, tronqué en le copiant/collant…). */
 export function decodeSnapshotFromParam(param: string): ImportPayload | null {
-  if (!param) return null;
   try {
+    // Paramètre vide ou invalide : decompress renvoie une valeur vide/nulle que
+    // JSON.parse rejette ; un `m`/`a` qui n'est pas un tableau fait de même
+    // lever `.map` — tout cela est intercepté ci-dessous.
     const json = LZString.decompressFromEncodedURIComponent(param);
-    if (!json) return null;
-    const compact = JSON.parse(json) as Partial<CompactSnapshot>;
-    if (!Array.isArray(compact.m) || !Array.isArray(compact.a)) return null;
+    const compact = JSON.parse(json as string) as CompactSnapshot;
     return {
       name: typeof compact.n === "string" ? compact.n.slice(0, MAX_LIST_NAME_LENGTH) : "",
       meals: compact.m.map(fromCompact),
