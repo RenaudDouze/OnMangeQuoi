@@ -6,6 +6,8 @@ export default defineConfig({
     alias: {
       // Voir worker/test/cloudflareWorkersShim.ts.
       "cloudflare:workers": path.resolve(import.meta.dirname, "worker/test/cloudflareWorkersShim.ts"),
+      // Voir src/test/pwaRegisterShim.ts.
+      "virtual:pwa-register": path.resolve(import.meta.dirname, "src/test/pwaRegisterShim.ts"),
     },
   },
   test: {
@@ -23,7 +25,7 @@ export default defineConfig({
       // utilement ; exercée par les tests e2e, toute sa logique métier vivant
       // dans reducer.ts, entièrement testé).
       include: ["shared/**/*.ts", "worker/**/*.ts", "src/**/*.ts"],
-      exclude: ["**/*.test.ts", "shared/types.ts", "worker/mealRoom.ts", "worker/test/**"],
+      exclude: ["**/*.test.ts", "shared/types.ts", "worker/mealRoom.ts", "worker/test/**", "src/test/**"],
       thresholds: {
         lines: 100,
         branches: 100,

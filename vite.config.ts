@@ -20,7 +20,7 @@ export default defineConfig({
     // that folder, never those two stray files, and neither ends up bundled
     // inside index.js itself.
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       manifest: {
         name: "OnMangeQuoi",
         short_name: "OnMangeQuoi",

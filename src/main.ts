@@ -4,6 +4,9 @@ import { mountListView } from "./views/list";
 import { applyTheme, getThemePreference } from "./lib/theme";
 import { applyAccessibilityPreference, getAccessibilityPreference } from "./lib/accessibilityPreference";
 import { appPath, routePath } from "./lib/basePath";
+import { initUpdatePrompt } from "./lib/updatePrompt";
+import { showUpdateBanner, watchOffline } from "./components/pwaBanner";
+import { registerSW } from "virtual:pwa-register";
 
 // Appliqué avant le premier rendu pour éviter un flash de thème clair suivi
 // d'un bascule sombre si l'utilisateur a choisi un thème manuel.
@@ -36,3 +39,6 @@ function render(): void {
 
 window.addEventListener("popstate", render);
 render();
+
+watchOffline();
+initUpdatePrompt({ register: registerSW, showBanner: showUpdateBanner });
