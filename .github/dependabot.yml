@@ -7,6 +7,10 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+    commit-message:
+      prefix: build
+      prefix-development: chore
+      include: scope
     open-pull-requests-limit: 10
 
   - package-ecosystem: github-actions
@@ -17,4 +21,7 @@ updates:
       codeql-action:
         patterns:
           - "github/codeql-action*"
+    commit-message:
+      prefix: ci
+      include: scope
     open-pull-requests-limit: 10
