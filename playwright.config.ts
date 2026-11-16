@@ -30,7 +30,7 @@ export default defineConfig({
       "CF-Connecting-IP": `10.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 254) + 1}`,
     },
   },
-  webServer: {
+  webServer: [{
     // --host 127.0.0.1 is load-bearing, not cosmetic: without it Vite binds
     // to whatever `localhost` resolves to, and on GitHub Actions' runners
     // that's IPv6-only (`::1`). The dev server then never opens an IPv4
@@ -44,11 +44,29 @@ export default defineConfig({
     // workerd) can take a while on shared CI runners.
     timeout: 120_000,
   },
+  {
+    // Build de production servi tel quel : le service worker n'existe pas sous
+    // `vite dev`, donc le test hors ligne (PWA-05) ne peut pas s'y faire.
+    command: "npm run build && npm run preview -- --port 4173 --strictPort --host 127.0.0.1",
+    url: "http://127.0.0.1:4173",
+    reuseExistingServer: !process.env.CI,
+    timeout: 180_000,
+  }],
   projects: [
     {
       name: "chromium",
+      testIgnore: "offline.spec.ts",
       use: {
         ...devices["Desktop Chrome"],
+        ...(executablePath ? { launchOptions: { executablePath } } : {}),
+      },
+    },
+    {
+      name: "offline",
+      testMatch: "offline.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: "http://127.0.0.1:4173",
         ...(executablePath ? { launchOptions: { executablePath } } : {}),
       },
     },
