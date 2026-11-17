@@ -18,9 +18,8 @@ updates:
     schedule:
       interval: weekly
     groups:
-      codeql-action:
-        patterns:
-          - "github/codeql-action*"
+      github-actions:
+        patterns: ["*"]
     commit-message:
       prefix: ci
       include: scope
