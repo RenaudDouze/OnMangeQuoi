@@ -1,6 +1,7 @@
 import { createList, fetchListState, ApiError } from "../lib/http";
 import { getRecentLists, forgetRecentList, touchRecentList } from "../lib/storage";
 import { escapeHtml } from "../lib/dom";
+import { APP_VERSION } from "../lib/appVersion";
 import { icons } from "../lib/icons";
 import { cycleThemePreference, getThemePreference, themeLabel, type ThemePreference } from "../lib/theme";
 import { getAccessibilityPreference, setAccessibilityPreference } from "../lib/accessibilityPreference";
@@ -93,6 +94,7 @@ export function mountHomeView(root: HTMLElement, navigate: (path: string) => voi
           </form>
           <p id="join-error" class="error" hidden></p>
         </section>
+        <p class="app-version">Version ${APP_VERSION}</p>
       </div>
     `;
 

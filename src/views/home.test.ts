@@ -72,6 +72,11 @@ describe("mountHomeView", () => {
     history.replaceState({}, "", "/");
   });
 
+  it("affiche la version du projet en pied d'accueil (VER-09)", () => {
+    mountHomeView(root, navigate);
+    expect(root.querySelector(".app-version")?.textContent).toBe("Version 9.9.9-test");
+  });
+
   it("le nettoyage renvoyé est sans effet", () => {
     const stop = mount();
     expect(() => stop()).not.toThrow();
