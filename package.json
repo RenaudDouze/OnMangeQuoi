@@ -18,6 +18,7 @@
     "cf-typegen": "wrangler types"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@cloudflare/vite-plugin": "^1.69.1",
     "@cloudflare/workers-types": "^5.20261115.1",
     "@playwright/test": "^1.65.1",

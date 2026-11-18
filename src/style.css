@@ -2,10 +2,10 @@
   --bg: #faf6f2;
   --surface: #ffffff;
   --text: #241d18;
-  --text-muted: #7a6d63;
+  --text-muted: #695d54;
   --border: #ece3da;
-  --primary: #c9622c;
-  --primary-dark: #a54f22;
+  --primary: #b4531f;
+  --primary-dark: #8f3f17;
   --primary-contrast: #ffffff;
   --danger: #c4453a;
   --checked-bg: #f3ece4;
@@ -779,7 +779,7 @@ button:focus-visible,
 
 /* Mêmes couleurs que .status-pill[data-status][aria-pressed="true"]. */
 .meal-card[data-status="idee"] {
-  border-left-color: #8d8177;
+  border-left-color: #6f645b;
 }
 
 .meal-card[data-status="validee"] {
@@ -973,7 +973,7 @@ button:focus-visible,
 
 .status-pill[data-status="idee"][aria-pressed="true"],
 .filter-status-pill[data-status="idee"][aria-pressed="true"] {
-  background: #8d8177;
+  background: #6f645b;
 }
 
 .status-pill[data-status="validee"][aria-pressed="true"],
@@ -1043,7 +1043,7 @@ button:focus-visible,
    dans la rangée se lisait comme un décalage des autres pastilles. Même
    couleur neutre que .status-pill[data-status="idee"]. */
 .preptime-pill[data-preptime=""][aria-pressed="true"] {
-  background: #8d8177;
+  background: #6f645b;
 }
 
 .preptime-pill[data-preptime="rapide"][aria-pressed="true"],
@@ -1108,7 +1108,7 @@ button:focus-visible,
 }
 
 .later-pill[aria-pressed="true"] {
-  color: #fff;
+  color: var(--primary-contrast);
   border-color: transparent;
   background: var(--primary-dark);
 }
@@ -1550,5 +1550,4 @@ button:focus-visible,
   text-align: center;
   font-size: 0.75rem;
   color: var(--text-muted, inherit);
-  opacity: 0.7;
 }
